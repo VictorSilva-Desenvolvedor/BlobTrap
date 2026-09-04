@@ -334,6 +334,11 @@
                                                                       RelativeSource={RelativeSource AncestorType=Window}}"
                                                             CommandParameter="{Binding}"/>
                                                     <Button Padding="12,4" MinHeight="26" FontSize="11"
+                                                            Margin="8,0,0,0" Content="Tentar de novo"
+                                                            ToolTip="Reenfileira com a mesma qualidade e o mesmo destino"
+                                                            Visibility="{Binding CanRetry, Converter={StaticResource BoolToVisibility}}"
+                                                            Command="{Binding RetryCommand}"/>
+                                                    <Button Padding="12,4" MinHeight="26" FontSize="11"
                                                             Margin="8,0,0,0" Content="Cancelar"
                                                             Visibility="{Binding CanCancel, Converter={StaticResource BoolToVisibility}}"
                                                             Command="{Binding CancelCommand}"/>

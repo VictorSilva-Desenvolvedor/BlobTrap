@@ -179,6 +179,16 @@ internal static class DesignData
                     ProgressPercent: 0,
                     IsFailed: true,
                     CanCancel: false)),
+
+            Job(dispatcher,
+                "Documentario sobre o mar [1080p].mp4",
+                new JobPreview(
+                    StateLabel: "Falhou",
+                    DetailLabel: "Falha ao buscar segmento 412 apos 5 tentativas.",
+                    ProgressPercent: 63,
+                    IsFailed: true,
+                    CanCancel: false,
+                    CanRetry: true)),
         };
 
         return items;

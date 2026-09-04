@@ -352,7 +352,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         });
 
     private void OnJobAdded(object? sender, DownloadJob job) =>
-        RunOnUi(() => Jobs.Insert(0, new JobItem(job, _dispatcher)));
+        RunOnUi(() => Jobs.Insert(0, new JobItem(job, _dispatcher, Downloads.Retry)));
 
     private void RunOnUi(Action action)
     {
