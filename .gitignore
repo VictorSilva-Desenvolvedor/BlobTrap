@@ -7,3 +7,4 @@ obj/
 TestResults/
 dist/
 publish/
+publish-portable/

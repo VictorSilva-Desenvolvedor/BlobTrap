@@ -11,6 +11,14 @@
     <AssemblyTitle>BlobTrap</AssemblyTitle>
     <Version>1.0.0</Version>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+
+    <!--
+      Sem os .xml de documentacao das dependencias. O pacote do WebView2 traz 800 KB deles,
+      que nao servem em runtime: sao para o IntelliSense de quem programa contra a biblioteca.
+      No publish portatil eles quebravam a promessa de "um arquivo so'"; no instalador eram
+      apenas peso morto.
+    -->
+    <AllowedReferenceRelatedFileExtensions>none</AllowedReferenceRelatedFileExtensions>
   </PropertyGroup>
 
   <ItemGroup>
