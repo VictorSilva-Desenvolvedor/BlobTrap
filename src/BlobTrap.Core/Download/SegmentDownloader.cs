@@ -32,46 +32,154 @@ public sealed class SegmentDownloader
 
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
 
+        var partPath = outputPath + ".part";
+        var statePath = outputPath + ".progress";
+
+        var resumeFrom = PrepareResume(partPath, statePath, parts);
+
         var window = Math.Max(1, Parallelism);
         var meter = new SpeedMeter();
         var contentParts = parts.Count(p => !p.IsInitialization);
-        var done = 0;
 
-        await using var output = new FileStream(
-            outputPath, FileMode.Create, FileAccess.Write, FileShare.Read, bufferSize: 1 << 20, useAsync: true);
+        var done = resumeFrom;
+        var identity = SegmentResumeState.BuildIdentity(parts);
 
-        var inFlight = new Queue<Task<byte[]>>(window);
-        var next = 0;
+        await using (var output = new FileStream(
+            partPath,
+            resumeFrom > 0 ? FileMode.Append : FileMode.Create,
+            FileAccess.Write, FileShare.Read, bufferSize: 1 << 20, useAsync: true))
+        {
+            var inFlight = new Queue<Task<byte[]>>(window);
+            var next = resumeFrom;
+            var sinceCheckpoint = 0;
 
-        using var failFast = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            using var failFast = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+            try
+            {
+                while (next < parts.Count || inFlight.Count > 0)
+                {
+                    while (inFlight.Count < window && next < parts.Count)
+                    {
+                        inFlight.Enqueue(FetchPartAsync(parts[next], context, meter, failFast.Token));
+                        next++;
+                    }
+
+                    var data = await inFlight.Dequeue().ConfigureAwait(false);
+                    await output.WriteAsync(data, cancellationToken).ConfigureAwait(false);
+
+                    done++;
+                    sinceCheckpoint++;
+
+                    if (sinceCheckpoint >= CheckpointEvery)
+                    {
+                        await CheckpointAsync(output, statePath, identity, done, parts.Count).ConfigureAwait(false);
+                        sinceCheckpoint = 0;
+                    }
+
+                    progress?.Report(new SegmentProgress(
+                        Math.Min(done, contentParts), contentParts, meter.TotalBytes, meter.BytesPerSecond));
+                }
+            }
+            catch
+            {
+                // Stop the still-running fetches before unwinding, so they do not keep hitting the CDN.
+                failFast.Cancel();
+                await ObserveRemainingAsync(inFlight).ConfigureAwait(false);
+
+                // Marca o que ja esta seguro no disco antes de subir o erro: e' o que permite a
+                // proxima tentativa continuar em vez de rebaixar tudo.
+                await CheckpointAsync(output, statePath, identity, done, parts.Count).ConfigureAwait(false);
+                throw;
+            }
+
+            await output.FlushAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        // Terminou: o sidecar sai antes do arquivo entrar no lugar, para nao sobrar um estado
+        // apontando para um .part que nao existe mais.
+        SegmentResumeState.TryDelete(statePath);
+        File.Move(partPath, outputPath, overwrite: true);
+    }
+
+    /// <summary>De quantas em quantas partes o progresso é gravado. Ver <see cref="CheckpointAsync"/>.</summary>
+    private const int CheckpointEvery = 10;
+
+    /// <summary>
+    /// Grava quantas partes já estão seguras no disco.
+    ///
+    /// O flush vem antes de gravar o número, e nunca o contrário: se o processo morrer entre os
+    /// dois, o <c>.part</c> terá mais bytes do que o sidecar diz — situação que
+    /// <see cref="PrepareResume"/> resolve cortando o excedente. Na ordem inversa o sidecar
+    /// prometeria bytes que não foram escritos, e a emenda sairia corrompida.
+    /// </summary>
+    private static async Task CheckpointAsync(FileStream output, string statePath, string identity, int done, int total)
+    {
+        try
+        {
+            await output.FlushAsync(CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (IOException)
+        {
+            // Sem flush confirmado nao da' para prometer nada; o sidecar fica como estava.
+            return;
+        }
+
+        new SegmentResumeState
+        {
+            WrittenParts = done,
+            Bytes = output.Length,
+            TotalParts = total,
+            Identity = identity,
+        }.TryWrite(statePath);
+    }
+
+    /// <summary>
+    /// Decide de qual parte começar e deixa o <c>.part</c> consistente com essa decisão.
+    ///
+    /// Só retoma quando tudo bate: o sidecar descreve este mesmo stream, o arquivo existe, e o
+    /// tamanho dele é pelo menos o que foi prometido. Qualquer outra combinação começa do zero
+    /// — perder o download é ruim, mas emendar bytes errados entrega um vídeo corrompido que o
+    /// usuário só descobre ao assistir.
+    /// </summary>
+    /// <returns>Índice da primeira parte a buscar. 0 significa começar do zero.</returns>
+    internal static int PrepareResume(string partPath, string statePath, IReadOnlyList<MediaPart> parts)
+    {
+        var state = SegmentResumeState.TryRead(statePath);
+
+        if (state is null || !state.Matches(parts) || !File.Exists(partPath))
+        {
+            SegmentResumeState.TryDelete(statePath);
+            return 0;
+        }
 
         try
         {
-            while (next < parts.Count || inFlight.Count > 0)
+            var actual = new FileInfo(partPath).Length;
+
+            // Menor do que o prometido: o arquivo foi truncado por fora. Nao da' para saber
+            // onde ele parou de fato, entao nada aqui e' confiavel.
+            if (actual < state.Bytes)
             {
-                while (inFlight.Count < window && next < parts.Count)
-                {
-                    inFlight.Enqueue(FetchPartAsync(parts[next], context, meter, failFast.Token));
-                    next++;
-                }
-
-                var data = await inFlight.Dequeue().ConfigureAwait(false);
-                await output.WriteAsync(data, cancellationToken).ConfigureAwait(false);
-
-                done++;
-                progress?.Report(new SegmentProgress(
-                    Math.Min(done, contentParts), contentParts, meter.TotalBytes, meter.BytesPerSecond));
+                SegmentResumeState.TryDelete(statePath);
+                return 0;
             }
-        }
-        catch
-        {
-            // Stop the still-running fetches before unwinding, so they do not keep hitting the CDN.
-            failFast.Cancel();
-            await ObserveRemainingAsync(inFlight).ConfigureAwait(false);
-            throw;
-        }
 
-        await output.FlushAsync(cancellationToken).ConfigureAwait(false);
+            // Maior: o processo morreu no meio de uma parte, depois do ultimo checkpoint. O
+            // excedente e' uma parte pela metade - corta e retoma do ponto prometido.
+            if (actual > state.Bytes)
+            {
+                using var trim = new FileStream(partPath, FileMode.Open, FileAccess.Write, FileShare.None);
+                trim.SetLength(state.Bytes);
+            }
+
+            return state.WrittenParts;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            SegmentResumeState.TryDelete(statePath);
+            return 0;
+        }
     }
 
     /// <summary>Awaits abandoned fetches and swallows their errors, so none surface as unobserved.</summary>

@@ -40,29 +40,32 @@ public sealed class DownloadExecutor : IDownloadRunner
         var workDirectory = Path.Combine(WorkspaceCleaner.TempRoot, job.Id);
         Directory.CreateDirectory(workDirectory);
 
-        try
+        var warnings = new List<string>();
+
+        if (plan.Video.Delivery == DeliveryMode.External)
         {
-            var warnings = new List<string>();
-
-            if (plan.Video.Delivery == DeliveryMode.External)
-            {
-                await RunExternalAsync(plan, progress, cancellationToken).ConfigureAwait(false);
-            }
-            else
-            {
-                var muxWarning = await RunNativeAsync(plan, workDirectory, progress, cancellationToken)
-                    .ConfigureAwait(false);
-
-                if (muxWarning is not null) warnings.Add(muxWarning);
-            }
-
-            warnings.AddRange(await DownloadSubtitlesAsync(plan, cancellationToken).ConfigureAwait(false));
-            if (warnings.Count > 0) job.Warnings = warnings;
+            await RunExternalAsync(plan, progress, cancellationToken).ConfigureAwait(false);
         }
-        finally
+        else
         {
-            TryDeleteDirectory(workDirectory);
+            var muxWarning = await RunNativeAsync(plan, workDirectory, progress, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (muxWarning is not null) warnings.Add(muxWarning);
         }
+
+        warnings.AddRange(await DownloadSubtitlesAsync(plan, cancellationToken).ConfigureAwait(false));
+        if (warnings.Count > 0) job.Warnings = warnings;
+
+        // A pasta so' e' apagada quando o download termina - deliberadamente fora de um finally.
+        //
+        // Ela guarda os segmentos ja baixados e o sidecar de progresso, e o job mantem o mesmo
+        // Id numa nova tentativa. Apagar em falha ou cancelamento e' o que fazia um HLS de 4 GB
+        // interrompido em 95% ter que ser rebaixado inteiro.
+        //
+        // Pasta de download abandonado nao fica para sempre: WorkspaceCleaner varre o que
+        // estiver parado ha mais de seis horas na proxima abertura do app.
+        TryDeleteDirectory(workDirectory);
     }
 
     private async Task RunExternalAsync(DownloadPlan plan, IProgress<DownloadProgress> progress, CancellationToken cancellationToken)
