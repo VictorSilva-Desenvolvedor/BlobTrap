@@ -120,7 +120,7 @@ src/BlobTrap.App/           # WPF
   Theming/                  # tema do sistema, paleta de acento, efeitos de janela
   ViewModels/  Views/
 installer/                  # script Inno Setup e build
-tests/BlobTrap.Tests/       # 141 testes
+tests/BlobTrap.Tests/       # 144 testes
 ```
 
 ## Testes
