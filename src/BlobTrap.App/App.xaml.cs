@@ -1,8 +1,10 @@
 using System.Windows;
 using BlobTrap.App.Theming;
-using BlobTrap.Core.Download;
 using BlobTrap.App.ViewModels;
 using BlobTrap.App.Views;
+using BlobTrap.Core.Diagnostics;
+using BlobTrap.Core.Download;
+using BlobTrap.Core.Util;
 
 namespace BlobTrap.App;
 
@@ -19,13 +21,21 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        Log.Info("app", $"BlobTrap {AppVersion.Current} iniciando");
+
         // Brushes have to exist before the first window resolves its DynamicResource bindings.
         ThemeManager.Initialize();
 
         // Em segundo plano: a varredura percorre disco e o app nao deve esperar por ela para
         // abrir. Nao ha nada para relatar se falhar - o proprio SweepOrphans ja engole o que
         // nao conseguir apagar, e a proxima abertura tenta de novo.
-        _ = Task.Run(() => WorkspaceCleaner.SweepOrphans(DateTimeOffset.UtcNow));
+        _ = Task.Run(() =>
+        {
+            Log.TrimOldFiles(DateTimeOffset.UtcNow);
+
+            var freed = WorkspaceCleaner.SweepOrphans(DateTimeOffset.UtcNow);
+            if (freed > 0) Log.Info("app", $"temporarios orfaos removidos: {Naming.FormatBytes(freed)}");
+        });
 
         var preview = e.Args.FirstOrDefault(a => a.StartsWith(DesignPreviewFlag, StringComparison.OrdinalIgnoreCase));
 
@@ -55,6 +65,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        Log.Info("app", "encerrando");
         ThemeManager.Shutdown();
         base.OnExit(e);
     }

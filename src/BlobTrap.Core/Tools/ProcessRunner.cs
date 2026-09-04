@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using BlobTrap.Core.Diagnostics;
 
 namespace BlobTrap.Core.Tools;
 
@@ -73,8 +74,22 @@ public static class ProcessRunner
             throw;
         }
 
-        return new ProcessResult(process.ExitCode, stdout.ToString(), stderr.ToString());
+        var result = new ProcessResult(process.ExitCode, stdout.ToString(), stderr.ToString());
+
+        // O stderr do ffmpeg e do yt-dlp diz exatamente o que aconteceu e ate agora era jogado
+        // fora quando o processo saia com codigo != 0 sem que ninguem lesse o resultado.
+        if (!result.Success)
+        {
+            Log.Error("processo", $"{Path.GetFileName(fileName)} saiu com {result.ExitCode}"
+                + Environment.NewLine + Tail(result.StandardError, 2000));
+        }
+
+        return result;
     }
+
+    /// <summary>Ultimas linhas: o motivo real fica no fim, e o log nao precisa do resto.</summary>
+    private static string Tail(string text, int maxChars) =>
+        text.Length <= maxChars ? text : text[^maxChars..];
 
     private static void TryKill(Process process)
     {
