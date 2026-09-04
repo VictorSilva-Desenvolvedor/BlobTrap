@@ -82,13 +82,23 @@ public sealed class DownloadManager : IDisposable
 
         Transition(job, DownloadState.Preparing);
 
-        var progress = new Progress<DownloadProgress>(p =>
+        // Progresso aplicado na propria thread que reporta, e nao por Progress<T>.
+        //
+        // Progress<T> criado fora da thread de UI despacha via ThreadPool, ou seja, de forma
+        // assincrona. Um relatorio ainda na fila rodava DEPOIS da transicao para Completed e
+        // reescrevia o estado para Downloading - um download terminado que ficava preso em
+        // "Baixando" para sempre, sem botao de abrir o arquivo. Aplicando na hora, quando
+        // ExecuteAsync retorna nao existe mais relatorio pendente.
+        //
+        // Nao ha custo de thread de UI aqui: quem marshala e o JobItem, no evento Changed.
+        var progress = new InlineProgress<DownloadProgress>(p =>
         {
+            // Segunda trava: estado final e final. Sem isto, qualquer caminho futuro que
+            // reporte progresso tarde volta a corromper o estado do mesmo jeito.
+            if (job.IsFinished) return;
+
             job.Progress = p;
-            if (job.State != DownloadState.Downloading && p.Stage != "Finalizando")
-                job.State = DownloadState.Downloading;
-            else if (p.Stage == "Finalizando")
-                job.State = DownloadState.Muxing;
+            job.State = p.Stage == "Finalizando" ? DownloadState.Muxing : DownloadState.Downloading;
 
             Notify(job);
         });
@@ -144,4 +154,17 @@ public sealed class DownloadManager : IDisposable
     }
 
     public void Dispose() => CancelAll();
+}
+
+/// <summary>
+/// <see cref="IProgress{T}"/> que roda o handler na thread que chamou Report, em vez de
+/// despachar. Ver o comentario em <see cref="DownloadManager"/> para o porque.
+/// </summary>
+internal sealed class InlineProgress<T> : IProgress<T>
+{
+    private readonly Action<T> _handler;
+
+    public InlineProgress(Action<T> handler) => _handler = handler;
+
+    public void Report(T value) => _handler(value);
 }

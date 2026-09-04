@@ -63,6 +63,85 @@ public class DownloadManagerTests
         Assert.Equal(1, runner.Started);
     }
 
+    /// <summary>
+    /// A regressão do Progress de despacho assíncrono: o relatório ia para o ThreadPool, então
+    /// um relatório ainda na fila rodava depois da transição para Completed e reescrevia o
+    /// estado para Downloading. O download terminava e a interface dizia que não.
+    /// </summary>
+    [Fact]
+    public async Task ProgressoTardio_NaoRessuscitaUmJobConcluido()
+    {
+        var runner = new FakeRunner
+        {
+            // Reporta e retorna na mesma hora, sem folga entre o último relatório e o fim.
+            Work = (job, progress) =>
+            {
+                for (var i = 0; i < 200; i++)
+                    progress.Report(new DownloadProgress { BytesReceived = i, TotalBytes = 200, Stage = "Baixando" });
+
+                return Task.CompletedTask;
+            },
+        };
+
+        using var manager = new DownloadManager(runner);
+
+        var job = manager.Enqueue(Plan());
+        await WaitUntil(() => job.IsFinished);
+
+        // Folga generosa: se ainda houvesse relatório em voo, é aqui que ele chegaria.
+        await Task.Delay(150);
+
+        Assert.Equal(DownloadState.Completed, job.State);
+    }
+
+    [Fact]
+    public async Task EstadoFinal_NaoAceitaMaisProgresso()
+    {
+        IProgress<DownloadProgress>? captured = null;
+        var runner = new FakeRunner
+        {
+            Work = (job, progress) =>
+            {
+                captured = progress;
+                return Task.CompletedTask;
+            },
+        };
+
+        using var manager = new DownloadManager(runner);
+        var job = manager.Enqueue(Plan());
+        await WaitUntil(() => job.IsFinished);
+
+        captured!.Report(new DownloadProgress { BytesReceived = 1, Stage = "Baixando" });
+
+        Assert.Equal(DownloadState.Completed, job.State);
+    }
+
+    [Fact]
+    public async Task EstagioFinalizando_ViraMuxing()
+    {
+        var seen = new ConcurrentBag<DownloadState>();
+        var runner = new FakeRunner
+        {
+            Work = (job, progress) =>
+            {
+                progress.Report(new DownloadProgress { Stage = "Baixando video" });
+                seen.Add(job.State);
+
+                progress.Report(new DownloadProgress { Stage = "Finalizando" });
+                seen.Add(job.State);
+
+                return Task.CompletedTask;
+            },
+        };
+
+        using var manager = new DownloadManager(runner);
+        var job = manager.Enqueue(Plan());
+        await WaitUntil(() => job.IsFinished);
+
+        Assert.Contains(DownloadState.Downloading, seen);
+        Assert.Contains(DownloadState.Muxing, seen);
+    }
+
     [Fact]
     public async Task MaxConcurrent_LimitaQuantosCorremAoMesmoTempo()
     {
