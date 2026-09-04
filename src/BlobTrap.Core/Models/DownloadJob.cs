@@ -126,8 +126,16 @@ public sealed class DownloadJob
     public void Cancel()
     {
         if (IsFinished) return;
-        try { _cts.Cancel(); }
-        catch (ObjectDisposedException) { }
+
+        try
+        {
+            _cts.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // The job finished between the IsFinished check and here, and the manager
+            // already disposed the source. There is nothing left to cancel.
+        }
     }
 
     internal void DisposeToken() => _cts.Dispose();

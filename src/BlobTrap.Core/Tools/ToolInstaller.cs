@@ -183,7 +183,7 @@ public sealed class ToolInstaller
             }
             else
             {
-                progress?.Report(new ToolInstallProgress($"{label}: checksum indisponivel, seguindo sem verificar.", null));
+                progress?.Report(new ToolInstallProgress($"{label}: checksum indisponível, seguindo sem verificar.", null));
             }
 
             // One atomic step, so a crash cannot leave the user with no tool at all.

@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Input;
 using BlobTrap.App.Browser;
+using BlobTrap.App.Theming;
 using BlobTrap.App.ViewModels;
 using BlobTrap.Core.Models;
 using BlobTrap.Core.Tools;
@@ -16,10 +17,22 @@ public partial class MainWindow : Window, IMediaPicker
     private PageMediaProbe? _probe;
 
     public MainWindow()
+        : this(null)
+    {
+    }
+
+    /// <summary>
+    /// Takes a pre-built view model so the design preview can reuse this exact window with
+    /// sample content instead of a second copy of the layout that would drift out of step.
+    /// </summary>
+    public MainWindow(MainViewModel? viewModel)
     {
         InitializeComponent();
 
-        _viewModel = new MainViewModel(Dispatcher) { Picker = this };
+        WindowEffects.Attach(this);
+
+        _viewModel = viewModel ?? new MainViewModel(Dispatcher);
+        _viewModel.Picker = this;
         DataContext = _viewModel;
 
         _viewModel.NavigationRequested += OnNavigationRequested;
@@ -31,6 +44,10 @@ public partial class MainWindow : Window, IMediaPicker
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
+        // The design preview reviews the interface, not the browser: starting WebView2 would
+        // add a network dependency and a blank white pane to every screenshot.
+        if (_viewModel.IsDesignSample) return;
+
         try
         {
             // A dedicated profile keeps the user's own browser data untouched and lets logins
@@ -43,9 +60,9 @@ public partial class MainWindow : Window, IMediaPicker
         }
         catch (Exception ex)
         {
-            _viewModel.StatusText = "WebView2 indisponivel.";
+            _viewModel.StatusText = "WebView2 indisponível.";
             MessageBox.Show(this,
-                "Nao foi possivel iniciar o navegador embutido.\n\n" +
+                "Não foi possível iniciar o navegador embutido.\n\n" +
                 "Instale o 'Microsoft Edge WebView2 Runtime' e abra o BlobTrap novamente.\n\n" + ex.Message,
                 "BlobTrap", MessageBoxButton.OK, MessageBoxImage.Error);
             return;
@@ -123,7 +140,7 @@ public partial class MainWindow : Window, IMediaPicker
         Dispatcher.BeginInvoke(() =>
         {
             _viewModel.StatusText = _viewModel.Candidates.Count == 0
-                ? "Player usando blob: (MSE). Comece a reproduzir o video para capturar o manifesto."
+                ? "Player usando blob: (MSE). Comece a reproduzir o vídeo para capturar o manifesto."
                 : _viewModel.StatusText;
         });
 

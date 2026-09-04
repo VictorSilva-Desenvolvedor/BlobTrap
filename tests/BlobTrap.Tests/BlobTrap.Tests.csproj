@@ -1,10 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <!--
+      Windows-targeted with WPF so the theming and view-model layer can be tested too.
+      A broken resource key stops a window from loading, which is exactly the kind of
+      failure that has to fail in CI rather than in front of the user.
+    -->
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
@@ -17,11 +22,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Using Include="Xunit" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\..\src\BlobTrap.Core\BlobTrap.Core.csproj" />
+    <ProjectReference Include="..\..\src\BlobTrap.App\BlobTrap.App.csproj" />
   </ItemGroup>
 
 </Project>

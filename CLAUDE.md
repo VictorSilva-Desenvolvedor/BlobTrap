@@ -65,7 +65,7 @@ Nada vai direto para `main`.
 
 1. Branch a partir da `main` atualizada: `feat/…`, `fix/…`, `chore/…`
 2. Commits atômicos na branch (regra 3).
-3. PR descrevendo o que muda e por quê. CI verde é obrigatório.
+3. PR descrevendo o que muda e por quê.
 4. Merge na `main`.
 5. Apaga a branch — remota e local.
 6. `git checkout main && git pull` antes da próxima tarefa.

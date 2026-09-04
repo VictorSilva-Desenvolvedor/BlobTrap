@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
+using BlobTrap.App.Theming;
 using BlobTrap.App.ViewModels;
 using BlobTrap.Core.Models;
 using BlobTrap.Core.Util;
@@ -33,6 +34,9 @@ public partial class QualityWindow : Window
     {
         InitializeComponent();
 
+        // Windows 11 gives dialogs the transient acrylic material rather than Mica.
+        WindowEffects.Attach(this, Backdrop.Acrylic);
+
         _source = source;
         _viewModel = viewModel;
 
@@ -63,8 +67,8 @@ public partial class QualityWindow : Window
         var parts = new List<string> { source.Kind.ToDisplayString() };
 
         if (source.DurationSeconds is > 0) parts.Add(Naming.FormatDuration(source.DurationSeconds));
-        if (source.IsLive) parts.Add("transmissao ao vivo");
-        parts.Add($"{source.Variants.Count} faixa(s)");
+        if (source.IsLive) parts.Add("transmissão ao vivo");
+        parts.Add(source.Variants.Count == 1 ? "1 faixa" : $"{source.Variants.Count} faixas");
         parts.Add($"via {source.ResolvedBy}");
 
         return string.Join("  -  ", parts);
@@ -81,19 +85,24 @@ public partial class QualityWindow : Window
 
         OutputBox.Text = _viewModel.BuildOutputPath(_source, video, AudioOnlyCheck.IsChecked == true);
 
-        WarningText.Text = BuildWarning(video);
+        var warning = BuildWarning(video);
+        WarningText.Text = warning;
+        WarningPanel.Visibility = warning.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private string BuildWarning(MediaVariant video)
     {
         if (video.IsLive)
-            return "Transmissao ao vivo: o download captura o que ja esta no manifesto.";
+            return "Transmissão ao vivo: o download captura o que já está no manifesto.";
 
+        // Describes what actually happens rather than sounding like a block: the download
+        // still runs, it just cannot merge the two tracks at the end.
         if (video.Track == TrackKind.VideoOnly && !_viewModel.HasFfmpeg)
-            return "Esta qualidade tem video e audio separados e precisa do ffmpeg. Instale-o em Ferramentas.";
+            return "Sem ffmpeg, o vídeo e o áudio serão salvos como dois arquivos separados. "
+                 + "Instale-o em Ferramentas para receber um só.";
 
         if (video.Delivery is DeliveryMode.HlsSegments or DeliveryMode.DashSegments && !_viewModel.HasFfmpeg)
-            return "Sem ffmpeg o arquivo sai como stream bruto (.ts), reproduzivel no VLC.";
+            return "Sem ffmpeg o arquivo sai como stream bruto (.ts), reproduzível no VLC.";
 
         return string.Empty;
     }
@@ -136,7 +145,7 @@ public partial class QualityWindow : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, $"Pasta de destino invalida: {ex.Message}", "BlobTrap",
+            MessageBox.Show(this, $"Pasta de destino inválida: {ex.Message}", "BlobTrap",
                 MessageBoxButton.OK, MessageBoxImage.Error);
             return;
         }

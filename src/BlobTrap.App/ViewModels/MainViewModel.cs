@@ -55,6 +55,28 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         RefreshToolState();
     }
 
+    /// <summary>
+    /// True when this view model holds sample content for the design preview. The window uses
+    /// it to skip starting the browser, so the preview needs no network and no WebView2.
+    /// </summary>
+    public bool IsDesignSample { get; private init; }
+
+    /// <summary>Builds a view model filled with sample media and downloads, for reviewing the UI.</summary>
+    public static MainViewModel CreateDesignSample(Dispatcher dispatcher)
+    {
+        var model = new MainViewModel(dispatcher)
+        {
+            IsDesignSample = true,
+            AddressText = "https://www.exemplo.com/assistir/8f21c",
+            StatusText = "5 mídias detectadas.",
+        };
+
+        foreach (var candidate in DesignData.Candidates()) model.Candidates.Add(candidate);
+        foreach (var job in DesignData.Jobs(dispatcher)) model.Jobs.Add(job);
+
+        return model;
+    }
+
     public AppSettings Settings { get; }
 
     public MediaRegistry Registry { get; }
@@ -124,7 +146,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         var target = NormalizeAddress(AddressText);
         if (target is null)
         {
-            StatusText = "Endereco invalido.";
+            StatusText = "Endereço inválido.";
             return;
         }
 
@@ -173,8 +195,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         if (!HasYtDlp)
         {
-            Picker?.ShowMessage("yt-dlp necessario",
-                "Baixar a partir da pagina usa o yt-dlp. Instale-o pelo botao Ferramentas.");
+            Picker?.ShowMessage("yt-dlp necessário",
+                "Baixar a partir da página usa o yt-dlp. Instale-o pelo botão Ferramentas.");
             return;
         }
 
@@ -199,8 +221,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             if (source.IsProtected)
             {
                 Picker.ShowMessage("Conteudo protegido",
-                    $"Esta midia usa DRM ({source.ProtectionSystem}). O BlobTrap nao baixa conteudo protegido por DRM.");
-                StatusText = "Midia protegida por DRM.";
+                    $"Esta mídia usa DRM ({source.ProtectionSystem}). O BlobTrap não baixa conteúdo protegido por DRM.");
+                StatusText = "Mídia protegida por DRM.";
                 return;
             }
 
@@ -224,16 +246,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         catch (DrmProtectedException ex)
         {
             Picker.ShowMessage("Conteudo protegido", ex.Message);
-            StatusText = "Midia protegida por DRM.";
+            StatusText = "Mídia protegida por DRM.";
         }
         catch (OperationCanceledException)
         {
-            StatusText = "Analise cancelada (tempo esgotado).";
+            StatusText = "Análise cancelada (tempo esgotado).";
         }
         catch (Exception ex)
         {
-            Picker.ShowMessage("Nao foi possivel analisar", ex.Message);
-            StatusText = "Falha ao analisar a midia.";
+            Picker.ShowMessage("Não foi possível analisar", ex.Message);
+            StatusText = "Falha ao analisar a mídia.";
         }
         finally
         {
@@ -251,7 +273,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
         catch (Exception ex)
         {
-            StatusText = $"Nao foi possivel abrir a pasta: {ex.Message}";
+            StatusText = $"Não foi possível abrir a pasta: {ex.Message}";
         }
     }
 
@@ -266,7 +288,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
         catch (Exception ex)
         {
-            StatusText = $"Nao foi possivel abrir o arquivo: {ex.Message}";
+            StatusText = $"Não foi possível abrir o arquivo: {ex.Message}";
         }
     }
 
@@ -313,7 +335,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             if (item.IsStream) Candidates.Insert(0, item);
             else Candidates.Add(item);
 
-            StatusText = $"{Candidates.Count} midia(s) detectada(s).";
+            StatusText = $"{Candidates.Count} mídia(s) detectada(s).";
         });
 
     private void OnCandidateUpdated(object? sender, MediaCandidate candidate) =>

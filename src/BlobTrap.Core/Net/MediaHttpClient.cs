@@ -77,8 +77,15 @@ public sealed class MediaHttpClient : IDisposable
 
             if (response.IsSuccessStatusCode) return MediaProbe.From(response);
         }
-        catch (HttpRequestException) { }
-        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested) { }
+        catch (HttpRequestException)
+        {
+            // Handled by falling through to the ranged GET below - plenty of media CDNs
+            // answer HEAD with 405 or drop the connection outright.
+        }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // A HEAD that timed out, not the caller cancelling. Same fallback applies.
+        }
 
         using var ranged = new HttpRequestMessage(HttpMethod.Get, url);
         context.ApplyTo(ranged);
@@ -160,8 +167,15 @@ public sealed class MediaHttpClient : IDisposable
     {
         if (!string.IsNullOrWhiteSpace(charSet))
         {
-            try { return Encoding.GetEncoding(charSet!.Trim('"')).GetString(bytes); }
-            catch (ArgumentException) { }
+            try
+            {
+                return Encoding.GetEncoding(charSet!.Trim('"')).GetString(bytes);
+            }
+            catch (ArgumentException)
+            {
+                // The server named a charset this platform does not know; handled by the
+                // UTF-8 fallback below, which is right for essentially every manifest.
+            }
         }
 
         return new UTF8Encoding(false, false).GetString(bytes).TrimStart('﻿');

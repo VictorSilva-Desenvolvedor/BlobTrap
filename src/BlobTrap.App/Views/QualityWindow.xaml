@@ -1,12 +1,13 @@
 <Window x:Class="BlobTrap.App.Views.QualityWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Escolher qualidade" Height="620" Width="620"
-        Background="{StaticResource Surface}"
+        Title="Escolher qualidade" Height="660" Width="640"
+        MinHeight="520" MinWidth="520"
         WindowStartupLocation="CenterOwner"
-        ResizeMode="CanResize" ShowInTaskbar="False">
+        ShowInTaskbar="False"
+        UseLayoutRounding="True">
 
-    <Grid Margin="18">
+    <Grid Margin="24,20,24,20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -14,13 +15,14 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Header -->
-        <StackPanel Grid.Row="0" Margin="0,0,0,14">
-            <TextBlock x:Name="TitleText" FontSize="16" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-            <TextBlock x:Name="SubtitleText" Style="{StaticResource Muted}" Margin="0,4,0,0"/>
+        <!-- ===================== Header ===================== -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,18">
+            <TextBlock x:Name="TitleText" Style="{StaticResource Subtitle}"
+                       TextTrimming="CharacterEllipsis"/>
+            <TextBlock x:Name="SubtitleText" Style="{StaticResource CaptionMuted}" Margin="0,6,0,0"/>
         </StackPanel>
 
-        <!-- Tracks -->
+        <!-- ===================== Tracks ===================== -->
         <Grid Grid.Row="1">
             <Grid.RowDefinitions>
                 <RowDefinition Height="*"/>
@@ -28,45 +30,18 @@
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
-            <Border Grid.Row="0" Background="{StaticResource SurfaceRaised}" CornerRadius="8"
-                    BorderBrush="{StaticResource Border}" BorderThickness="1">
+            <Border Grid.Row="0" Style="{StaticResource Card}">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
-                    <TextBlock Grid.Row="0" Text="QUALIDADE" FontSize="10" FontWeight="Bold"
-                               Foreground="{StaticResource TextMuted}" Margin="14,12,0,6"/>
+                    <TextBlock Grid.Row="0" Text="QUALIDADE" Style="{StaticResource SectionHeader}"
+                               Margin="16,14,0,8"/>
 
-                    <ListBox Grid.Row="1" x:Name="VideoList" Background="Transparent" BorderThickness="0"
-                             Margin="6,0,6,8" HorizontalContentAlignment="Stretch"
-                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                        <ListBox.ItemContainerStyle>
-                            <Style TargetType="ListBoxItem">
-                                <Setter Property="Margin" Value="4,2"/>
-                                <Setter Property="Template">
-                                    <Setter.Value>
-                                        <ControlTemplate TargetType="ListBoxItem">
-                                            <Border x:Name="Root" CornerRadius="6" Padding="10,8"
-                                                    Background="Transparent" BorderThickness="1" BorderBrush="Transparent">
-                                                <ContentPresenter/>
-                                            </Border>
-                                            <ControlTemplate.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="Root" Property="Background" Value="{StaticResource SurfaceHover}"/>
-                                                </Trigger>
-                                                <Trigger Property="IsSelected" Value="True">
-                                                    <Setter TargetName="Root" Property="Background" Value="{StaticResource SurfaceHover}"/>
-                                                    <Setter TargetName="Root" Property="BorderBrush" Value="{StaticResource Accent}"/>
-                                                </Trigger>
-                                            </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                    </Setter.Value>
-                                </Setter>
-                            </Style>
-                        </ListBox.ItemContainerStyle>
-
+                    <ListBox Grid.Row="1" x:Name="VideoList" Margin="8,0,8,10"
+                             ItemContainerStyle="{StaticResource RowListItem}">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <Grid>
@@ -75,10 +50,12 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
 
-                                    <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="12.5"
-                                               TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding SizeLabel}" Style="{StaticResource Muted}"
-                                               Margin="10,0,0,0" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="0" Text="{Binding Label}" Margin="8,0,0,0"
+                                               TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+
+                                    <TextBlock Grid.Column="1" Text="{Binding SizeLabel}"
+                                               Style="{StaticResource CaptionMuted}"
+                                               Margin="12,0,0,0" VerticalAlignment="Center"/>
                                 </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
@@ -87,22 +64,30 @@
             </Border>
 
             <!-- Audio track -->
-            <Grid Grid.Row="1" Margin="0,12,0,0" x:Name="AudioRow">
+            <Grid Grid.Row="1" x:Name="AudioRow" Margin="0,16,0,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
-                <TextBlock Grid.Column="0" Text="Faixa de audio" VerticalAlignment="Center"
-                           Margin="0,0,12,0" FontSize="12"/>
-                <ComboBox Grid.Column="1" x:Name="AudioCombo" DisplayMemberPath="Label"/>
+                <TextBlock Grid.Column="0" Text="Faixa de áudio" VerticalAlignment="Center"
+                           Margin="2,0,14,0"/>
+                <!-- An explicit ItemTemplate, not DisplayMemberPath: the latter is applied
+                     through a template *selector*, which the closed box does not consult, so
+                     the collapsed ComboBox would fall back to ToString() on the variant. -->
+                <ComboBox Grid.Column="1" x:Name="AudioCombo">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis"/>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
             </Grid>
 
             <!-- Subtitles -->
-            <StackPanel Grid.Row="2" x:Name="SubtitleRow" Margin="0,12,0,0">
-                <TextBlock Text="LEGENDAS" FontSize="10" FontWeight="Bold"
-                           Foreground="{StaticResource TextMuted}" Margin="0,0,0,4"/>
-                <ItemsControl x:Name="SubtitleList" MaxHeight="90">
+            <StackPanel Grid.Row="2" x:Name="SubtitleRow" Margin="0,16,0,0">
+                <TextBlock Text="LEGENDAS" Style="{StaticResource SectionHeader}" Margin="2,0,0,6"/>
+                <ItemsControl x:Name="SubtitleList" MaxHeight="96" Margin="2,0,0,0">
                     <ItemsControl.Template>
                         <ControlTemplate TargetType="ItemsControl">
                             <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -119,13 +104,18 @@
             </StackPanel>
         </Grid>
 
-        <!-- Output -->
-        <StackPanel Grid.Row="2" Margin="0,14,0,0">
-            <CheckBox x:Name="AudioOnlyCheck" Content="Baixar somente o audio" Checked="OnAudioOnlyChanged"
-                      Unchecked="OnAudioOnlyChanged"/>
+        <!-- ===================== Output ===================== -->
+        <StackPanel Grid.Row="2" Margin="0,16,0,0">
+            <!-- A rule and its own header: sitting flush under the subtitle checkboxes with
+                 the same indent, this reads as a third subtitle rather than a separate idea. -->
+            <Border Height="1" Background="{DynamicResource Divider}" Margin="0,0,0,14"/>
 
-            <TextBlock Text="SALVAR COMO" FontSize="10" FontWeight="Bold"
-                       Foreground="{StaticResource TextMuted}" Margin="0,10,0,4"/>
+            <TextBlock Text="SAÍDA" Style="{StaticResource SectionHeader}" Margin="2,0,0,8"/>
+
+            <CheckBox x:Name="AudioOnlyCheck" Content="Baixar somente o áudio" Margin="2,0,0,0"
+                      Checked="OnAudioOnlyChanged" Unchecked="OnAudioOnlyChanged"/>
+
+            <TextBlock Text="SALVAR COMO" Style="{StaticResource SectionHeader}" Margin="2,14,0,6"/>
 
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -133,24 +123,41 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <TextBox Grid.Column="0" x:Name="OutputBox"/>
-                <Button Grid.Column="1" Content="..." Width="40" Margin="8,0,0,0" Click="OnBrowseClick"/>
+                <!-- The box is narrower than most paths, so the full one lives in the tooltip. -->
+                <TextBox Grid.Column="0" x:Name="OutputBox"
+                         ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+                <Button Grid.Column="1" Style="{StaticResource IconButton}" Content="&#xE8B7;"
+                        Margin="8,0,0,0" Click="OnBrowseClick" ToolTip="Escolher pasta e nome"/>
             </Grid>
         </StackPanel>
 
-        <!-- Actions -->
-        <Grid Grid.Row="3" Margin="0,18,0,0">
+        <!-- ===================== Actions ===================== -->
+        <Grid Grid.Row="3" Margin="0,20,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
-            <TextBlock Grid.Column="0" x:Name="WarningText" Style="{StaticResource Muted}"
-                       VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,12,0"/>
+            <!-- A Grid, not a StackPanel: a horizontal stack gives its children unlimited
+                 width, so the message would never wrap and would clip against the buttons. -->
+            <Grid Grid.Column="0" x:Name="WarningPanel" VerticalAlignment="Center"
+                  Margin="2,0,16,0" Visibility="Collapsed">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0" Text="&#xE7BA;" Style="{StaticResource Glyph}" FontSize="13"
+                           Foreground="{DynamicResource Warning}" VerticalAlignment="Top"
+                           Margin="0,1,8,0"/>
+                <TextBlock Grid.Column="1" x:Name="WarningText" Style="{StaticResource Caption}"
+                           TextWrapping="Wrap"/>
+            </Grid>
 
             <StackPanel Grid.Column="1" Orientation="Horizontal">
-                <Button Content="Cancelar" Width="100" Margin="0,0,8,0" Click="OnCancelClick"/>
-                <Button Content="Baixar" Width="120" Style="{StaticResource PrimaryButton}" Click="OnConfirmClick"/>
+                <Button Content="Cancelar" Width="104" Margin="0,0,8,0" Click="OnCancelClick"/>
+                <Button Content="Baixar" Width="124" Style="{StaticResource AccentButton}"
+                        Click="OnConfirmClick" IsDefault="True"/>
             </StackPanel>
         </Grid>
     </Grid>

@@ -1,4 +1,5 @@
 using System.Windows;
+using BlobTrap.App.Theming;
 using BlobTrap.App.ViewModels;
 using BlobTrap.Core.Tools;
 using Microsoft.Win32;
@@ -14,6 +15,8 @@ public partial class ToolsWindow : Window
     public ToolsWindow(MainViewModel viewModel)
     {
         InitializeComponent();
+
+        WindowEffects.Attach(this, Backdrop.Acrylic);
 
         _viewModel = viewModel;
 
@@ -35,11 +38,11 @@ public partial class ToolsWindow : Window
     private void RefreshToolLabels()
     {
         var ffmpeg = ToolLocator.Find(ExternalTool.Ffmpeg);
-        FfmpegStatus.Text = ffmpeg ?? "Nao instalado - junta video e audio e converte containers.";
+        FfmpegStatus.Text = ffmpeg ?? "Não instalado - junta vídeo e áudio e converte containers.";
         InstallFfmpegButton.Content = ffmpeg is null ? "Instalar" : "Reinstalar";
 
         var ytDlp = ToolLocator.Find(ExternalTool.YtDlp);
-        YtDlpStatus.Text = ytDlp ?? "Nao instalado - extrai video de sites que nao expoem o manifesto.";
+        YtDlpStatus.Text = ytDlp ?? "Não instalado - extrai vídeo de sites que não expõem o manifesto.";
         InstallYtDlpButton.Content = ytDlp is null ? "Instalar" : "Reinstalar";
     }
 
@@ -69,11 +72,11 @@ public partial class ToolsWindow : Window
         try
         {
             await _viewModel.InstallToolsAsync(ffmpeg, ytDlp, progress, _install.Token);
-            InstallStatus.Text = "Instalacao concluida.";
+            InstallStatus.Text = "Instalação concluída.";
         }
         catch (OperationCanceledException)
         {
-            InstallStatus.Text = "Instalacao cancelada.";
+            InstallStatus.Text = "Instalação cancelada.";
         }
         catch (Exception ex)
         {

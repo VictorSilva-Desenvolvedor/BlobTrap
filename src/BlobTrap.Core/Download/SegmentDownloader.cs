@@ -106,7 +106,7 @@ public sealed class SegmentDownloader
     internal static byte[] Decrypt(byte[] data, byte[] key, byte[]? iv)
     {
         if (key.Length != 16)
-            throw new CryptographicException($"Chave AES-128 invalida ({key.Length} bytes).");
+            throw new CryptographicException($"Chave AES-128 inválida ({key.Length} bytes).");
 
         using var aes = Aes.Create();
         aes.Key = key;

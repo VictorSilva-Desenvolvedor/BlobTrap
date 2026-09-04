@@ -98,7 +98,7 @@ public sealed class DashResolver
 
     private static string BuildAudioName(DashRepresentation representation)
     {
-        var name = representation.Language ?? "Audio";
+        var name = representation.Language ?? "Áudio";
         if (representation.Bandwidth is > 0) name += $" {representation.Bandwidth / 1000} kbps";
         return name;
     }

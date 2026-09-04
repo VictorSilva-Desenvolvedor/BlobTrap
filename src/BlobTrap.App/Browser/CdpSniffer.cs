@@ -49,7 +49,7 @@ public sealed class CdpSniffer : IDisposable
         }
         catch (Exception ex)
         {
-            Warning?.Invoke(this, $"Nao foi possivel ativar o monitor de rede: {ex.Message}");
+            Warning?.Invoke(this, $"Não foi possível ativar o monitor de rede: {ex.Message}");
         }
     }
 

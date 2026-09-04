@@ -48,7 +48,7 @@ public sealed class MediaResolver
         if (fallback is not null) return fallback;
 
         throw new InvalidOperationException(
-            primaryFailure?.Message ?? "Nao foi possivel identificar formatos para esta midia.", primaryFailure);
+            primaryFailure?.Message ?? "Não foi possível identificar formatos para esta mídia.", primaryFailure);
     }
 
     private async Task<MediaSource?> ResolvePrimaryAsync(MediaCandidate candidate, CancellationToken cancellationToken) =>
@@ -71,8 +71,15 @@ public sealed class MediaResolver
     {
         MediaProbe? probe = null;
 
-        try { probe = await _http.ProbeAsync(candidate.Url, candidate.Request, cancellationToken).ConfigureAwait(false); }
-        catch (HttpRequestException) { }
+        try
+        {
+            probe = await _http.ProbeAsync(candidate.Url, candidate.Request, cancellationToken).ConfigureAwait(false);
+        }
+        catch (HttpRequestException)
+        {
+            // The probe only enriches the result with size and real content type. Without it
+            // we still hand back a downloadable variant, so this is handled by carrying on.
+        }
 
         if (probe?.ContentType is { } contentType)
         {

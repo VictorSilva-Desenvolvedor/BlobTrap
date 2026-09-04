@@ -25,6 +25,26 @@ captura.
 - **Faixas separadas**: quando o vídeo vem sem áudio (o normal em DASH e em HLS com
   `EXT-X-MEDIA`), o BlobTrap baixa as duas e junta com ffmpeg.
 
+## Interface
+
+![Mídias detectadas](docs/tela-midias.png)
+
+| Escolher qualidade | Ferramentas |
+| --- | --- |
+| ![Diálogo de qualidade](docs/tela-qualidade.png) | ![Ferramentas e preferências](docs/tela-ferramentas.png) |
+
+Segue o Windows 11 em tempo de execução. Lê o tema claro/escuro e a cor de destaque direto do
+registro e troca a paleta quando você muda nas Configurações, sem reiniciar o app. Usa a rampa
+neutra do WinUI, Segoe UI Variable, Segoe Fluent Icons, cantos arredondados e barra de título
+integrada; os diálogos recebem o material acrílico.
+
+A janela principal usa superfície sólida em vez de Mica: ela hospeda o WebView2, que é uma
+janela filha opaca cobrindo quase toda a área — o material quase não apareceria, e as regiões
+que o DWM não pinta ficam pretas em vez de misturar.
+
+Sobre a cor de destaque: o Windows guarda oito tons em `AccentPalette`, e o tom certo depende do
+fundo. Em tema escuro o app usa a variante clara com texto preto, que é o que o WinUI faz.
+
 ## O que ele não faz
 
 Não remove DRM. Streams com Widevine, PlayReady, FairPlay ou ClearKey são identificados no
@@ -33,9 +53,26 @@ limitação a contornar.
 
 Você é responsável por ter o direito de baixar o que baixar.
 
-## Como rodar
+## Instalar
 
-Requisitos: .NET 8 SDK e o **Microsoft Edge WebView2 Runtime** (já vem no Windows 11).
+Baixe `BlobTrap-Setup-<versão>.exe` e execute. Instalação por usuário, sem pedir admin, com
+atalho no Menu Iniciar e entrada em Adicionar/Remover Programas. O app é publicado
+self-contained, então a máquina não precisa ter o .NET instalado.
+
+Requer o **Microsoft Edge WebView2 Runtime**, que já vem no Windows 11. O instalador verifica e
+avisa se estiver faltando.
+
+### Gerar o instalador
+
+```powershell
+winget install JRSoftware.InnoSetup   # uma vez
+pwsh installer\build.ps1
+```
+
+Publica, compila o `.iss` e escreve em `dist\`. A versão sai de `<Version>` no
+`BlobTrap.App.csproj`; para sobrescrever, use `-Version 1.1.0`.
+
+## Rodar do código
 
 ```bash
 dotnet build
@@ -43,8 +80,19 @@ dotnet run --project src/BlobTrap.App
 ```
 
 Na primeira execução, abra **Ferramentas** e instale ffmpeg e yt-dlp — o app baixa os dois
-para `%LOCALAPPDATA%\BlobTrap\bin`. Sem ffmpeg, streams saem como `.ts` bruto e faixas
-separadas não podem ser juntadas.
+para `%LOCALAPPDATA%\BlobTrap\bin`, conferindo o checksum publicado. Sem ffmpeg, streams saem
+como `.ts` bruto e faixas separadas não podem ser juntadas.
+
+Para revisar a interface sem navegar nem baixar nada:
+
+```bash
+dotnet run --project src/BlobTrap.App -- --design-preview
+dotnet run --project src/BlobTrap.App -- --design-preview:quality
+dotnet run --project src/BlobTrap.App -- --design-preview:tools
+```
+
+Abre as janelas reais com conteúdo de amostra. É a mesma tela que o usuário vê, não uma cópia,
+justamente para não divergir.
 
 ## Como usar
 
@@ -65,12 +113,14 @@ src/BlobTrap.Core/          # tudo que não é UI
   Dash/                     # parser de MPD e expansão de templates de segmento
   Resolving/                # manifesto -> lista de qualidades selecionáveis
   Download/                 # download paralelo, AES-128, fila
-  Tools/                    # ffmpeg, yt-dlp, instalador
+  Tools/                    # ffmpeg, yt-dlp, instalador com checksum
   Net/                      # HttpClient com retry e replay de contexto
 src/BlobTrap.App/           # WPF
   Browser/                  # sniffer CDP e sonda de DOM
+  Theming/                  # tema do sistema, paleta de acento, efeitos de janela
   ViewModels/  Views/
-tests/BlobTrap.Tests/       # 99 testes de parser, classificação e cripto
+installer/                  # script Inno Setup e build
+tests/BlobTrap.Tests/       # 141 testes
 ```
 
 ## Testes
@@ -79,7 +129,15 @@ tests/BlobTrap.Tests/       # 99 testes de parser, classificação e cripto
 dotnet test
 ```
 
-Cobrem o que quebra silenciosamente: parsing de HLS (atributos com vírgula dentro de aspas,
-byte ranges encadeados, IV derivado do media sequence), DASH (templates `$Number%05d$`,
-`SegmentTimeline` com `r=`, herança de `BaseURL` e de duração de período), classificação de
-URL e o round-trip do AES-128.
+Cobrem o que quebra silenciosamente:
+
+- **Parsing HLS**: atributos com vírgula dentro de aspas, byte ranges encadeados, IV derivado
+  do media sequence, variante só de áudio numa master mista.
+- **Parsing DASH**: templates `$Number%05d$`, `SegmentTimeline` com `r=`, herança de `BaseURL`
+  e de duração de período.
+- **AES-128**: round-trip de decriptação, IV curto, chave inválida.
+- **Chaves de recurso XAML**: toda referência `StaticResource`/`DynamicResource` tem que
+  existir. O compilador não verifica isso — uma chave errada compila com zero avisos e só
+  estoura quando a janela abre.
+- **Paleta de acento**: decodificação com cor assimétrica nas duas ordens de bytes possíveis.
+  Testar com o verde desta máquina não provaria nada, porque nele o vermelho é igual ao azul.

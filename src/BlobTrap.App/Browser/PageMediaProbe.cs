@@ -89,8 +89,18 @@ public sealed class PageMediaProbe
     private void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
         string payload;
-        try { payload = e.TryGetWebMessageAsString(); }
-        catch (ArgumentException) { return; }
+
+        try
+        {
+            payload = e.TryGetWebMessageAsString();
+        }
+        catch (ArgumentException)
+        {
+            // The page posted something that is not a string. Only our own injected script is
+            // supposed to post here, but any script on the page can, so a non-string message
+            // is another site's traffic rather than a fault of ours - dropping it is correct.
+            return;
+        }
 
         try
         {

@@ -1,3 +1,4 @@
+using System.Net.Http;
 using BlobTrap.Core.Models;
 using BlobTrap.Core.Net;
 using BlobTrap.Core.Tools;
@@ -147,7 +148,7 @@ public class MediaVariantTests
         Assert.Contains("60fps", variant.Label);
         Assert.Contains("4.5 Mbps", variant.Label);
         Assert.Contains("H.264", variant.Label);
-        Assert.Contains("sem audio", variant.Label);
+        Assert.Contains("sem áudio", variant.Label);
     }
 
     [Fact]

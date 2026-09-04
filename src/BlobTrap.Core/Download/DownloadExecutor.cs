@@ -37,16 +37,21 @@ public sealed class DownloadExecutor
 
         try
         {
+            var warnings = new List<string>();
+
             if (plan.Video.Delivery == DeliveryMode.External)
             {
                 await RunExternalAsync(plan, progress, cancellationToken).ConfigureAwait(false);
             }
             else
             {
-                await RunNativeAsync(plan, workDirectory, progress, cancellationToken).ConfigureAwait(false);
+                var muxWarning = await RunNativeAsync(plan, workDirectory, progress, cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (muxWarning is not null) warnings.Add(muxWarning);
             }
 
-            var warnings = await DownloadSubtitlesAsync(plan, cancellationToken).ConfigureAwait(false);
+            warnings.AddRange(await DownloadSubtitlesAsync(plan, cancellationToken).ConfigureAwait(false));
             if (warnings.Count > 0) job.Warnings = warnings;
         }
         finally
@@ -58,7 +63,7 @@ public sealed class DownloadExecutor
     private async Task RunExternalAsync(DownloadPlan plan, IProgress<DownloadProgress> progress, CancellationToken cancellationToken)
     {
         var ytDlp = _resolver.YtDlp
-            ?? throw new InvalidOperationException("Esta midia exige o yt-dlp, que nao esta instalado.");
+            ?? throw new InvalidOperationException("Esta mídia exige o yt-dlp, que não está instalado.");
 
         var selector = BuildFormatSelector(plan);
         var pageUrl = plan.Source.PageUrl ?? plan.Source.Url;
@@ -90,7 +95,7 @@ public sealed class DownloadExecutor
         return audio is null || plan.Video.Track == TrackKind.Muxed ? video : $"{video}+{audio}";
     }
 
-    private async Task RunNativeAsync(
+    private async Task<string?> RunNativeAsync(
         DownloadPlan plan,
         string workDirectory,
         IProgress<DownloadProgress> progress,
@@ -117,7 +122,9 @@ public sealed class DownloadExecutor
                 "Baixando audio", completedBytes, totalEstimate, progress, cancellationToken).ConfigureAwait(false);
         }
 
-        await FinalizeAsync(plan, videoPath, audioPath, videoDuration, progress, cancellationToken).ConfigureAwait(false);
+        return await FinalizeAsync(
+                plan, FfmpegRunner.TryCreate(), videoPath, audioPath, videoDuration, progress, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <summary>Downloads one track and returns its duration in seconds when known.</summary>
@@ -195,29 +202,48 @@ public sealed class DownloadExecutor
         await downloader.DownloadAsync(parts, outputPath, context, reporter, cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>Merges, remuxes or simply moves the downloaded tracks into the final file.</summary>
-    private static async Task FinalizeAsync(
+    /// <summary>
+    /// Merges, remuxes or simply moves the downloaded tracks into the final file. Returns a
+    /// warning when the result is not what was asked for but is still worth keeping.
+    /// </summary>
+    /// <param name="ffmpeg">
+    /// The muxer, or null when none is installed. Taken as a parameter rather than resolved
+    /// here so the no-ffmpeg branch can be tested: discovering it internally would make the
+    /// outcome depend on what happens to be on the machine, and this is the branch that
+    /// decides whether the user keeps the gigabytes just downloaded or loses them.
+    /// </param>
+    internal static async Task<string?> FinalizeAsync(
         DownloadPlan plan,
+        FfmpegRunner? ffmpeg,
         string videoPath,
         string? audioPath,
         double? duration,
         IProgress<DownloadProgress> progress,
         CancellationToken cancellationToken)
     {
-        var ffmpeg = FfmpegRunner.TryCreate();
         var expected = duration is > 0 ? TimeSpan.FromSeconds(duration.Value) : (TimeSpan?)null;
 
         Directory.CreateDirectory(Path.GetDirectoryName(plan.OutputPath)!);
 
         if (ffmpeg is null)
         {
-            // Without ffmpeg we cannot merge or rewrap - hand over what we have, correctly named.
+            // Without ffmpeg nothing can be merged or rewrapped, but the bytes are already
+            // downloaded. Handing both tracks over side by side beats deleting them and
+            // failing: the user keeps the work, and can merge later or reinstall and retry.
             if (audioPath is not null)
-                throw new InvalidOperationException(
-                    "Esta qualidade tem video e audio separados e precisa do ffmpeg para juntar. Instale o ffmpeg em Ferramentas.");
+            {
+                var stem = Path.Combine(
+                    Path.GetDirectoryName(plan.OutputPath)!,
+                    Path.GetFileNameWithoutExtension(plan.OutputPath));
+
+                MoveOver(videoPath, Naming.EnsureUniquePath($"{stem} (video){Path.GetExtension(videoPath)}"));
+                MoveOver(audioPath, Naming.EnsureUniquePath($"{stem} (audio){Path.GetExtension(audioPath)}"));
+
+                return "Sem ffmpeg, o vídeo e o áudio foram salvos como dois arquivos separados.";
+            }
 
             MoveOver(videoPath, ChangeExtension(plan.OutputPath, Path.GetExtension(videoPath)));
-            return;
+            return null;
         }
 
         var muxReporter = new Progress<MuxProgress>(p => progress.Report(new DownloadProgress
@@ -251,6 +277,8 @@ public sealed class DownloadExecutor
             await ffmpeg.RemuxAsync(videoPath, plan.OutputPath, expected, muxReporter, cancellationToken)
                 .ConfigureAwait(false);
         }
+
+        return null;
     }
 
     /// <summary>
@@ -317,16 +345,36 @@ public sealed class DownloadExecutor
         File.Move(source, destination, overwrite: true);
     }
 
+    /// <summary>
+    /// Size of a finished track, used only as the progress baseline for the next one. Returning
+    /// 0 when the file cannot be measured understates the bar; it never affects the download.
+    /// </summary>
     private static long FileLength(string path)
     {
-        try { return File.Exists(path) ? new FileInfo(path).Length : 0; }
-        catch (IOException) { return 0; }
+        try
+        {
+            return File.Exists(path) ? new FileInfo(path).Length : 0;
+        }
+        catch (IOException)
+        {
+            return 0;
+        }
     }
 
     private static void TryDeleteDirectory(string path)
     {
-        try { if (Directory.Exists(path)) Directory.Delete(path, recursive: true); }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
+        try
+        {
+            if (Directory.Exists(path)) Directory.Delete(path, recursive: true);
+        }
+        catch (IOException)
+        {
+            // Best effort: the file is already downloaded, and a stale temp folder is reused
+            // by id next run. Failing here would turn a finished download into an error.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Same - cleanup is not worth losing a completed job over.
+        }
     }
 }

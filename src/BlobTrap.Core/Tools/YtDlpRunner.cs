@@ -283,6 +283,16 @@ public sealed class YtDlpRunner
     private static double? ParseNumber(string value) =>
         double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var result) ? result : null;
 
+    /// <summary>
+    /// Replays the captured request identity onto yt-dlp's command line.
+    ///
+    /// The session Cookie goes through argv, which on Windows any process running as the same
+    /// user can read (Win32_Process.CommandLine). This is a deliberate choice, not an
+    /// oversight: the alternative, <c>--cookies</c>, wants a Netscape cookie jar, and building
+    /// one from a raw Cookie header means inferring domain, path, secure and expiry - real bug
+    /// surface - in exchange for moving the secret to a temp file instead. The trade is narrow,
+    /// since an attacker already running as this user can read the browser's own cookie store.
+    /// </summary>
     private static void AddNetworkArguments(List<string> arguments, RequestContext context)
     {
         arguments.Add("--user-agent");

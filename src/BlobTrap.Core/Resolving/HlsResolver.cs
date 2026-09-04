@@ -35,6 +35,17 @@ public sealed class HlsResolver
 
         var drmKey = master.SessionKeys.FirstOrDefault(k => k.IsDrm);
 
+        // CODECS is only a SHOULD in RFC 8216, so a master can describe an audio-only variant
+        // with no codec list at all. Missing metadata is read as audio only when some other
+        // variant declares video - the mixture is what makes the intent unambiguous. A master
+        // where nothing declares anything stays video, so we never hide the only video there is.
+        //
+        // The vouching variant must itself survive as video, or a packager that stamps
+        // RESOLUTION on an audio-only entry would back an inference and then be demoted to
+        // audio too, leaving nothing offerable at all.
+        var hasDeclaredVideo = master.Variants.Any(v =>
+            !v.IsIFrameOnly && DeclaresVideo(v) && !CodecInfo.IsAudioOnly(v.Codecs));
+
         foreach (var stream in master.Variants)
         {
             // Trick-play tracks hold only keyframes; downloading one gives a stuttering file.
@@ -42,7 +53,9 @@ public sealed class HlsResolver
 
             // A master may list an audio-only rendition as a stream alongside the video
             // variants; offering it as a "quality" hands the user a bare AAC file.
-            var isAudioOnly = CodecInfo.IsAudioOnly(stream.Codecs);
+            var isAudioOnly = CodecInfo.IsAudioOnly(stream.Codecs)
+                              || (hasDeclaredVideo && !DeclaresVideo(stream)
+                                  && string.IsNullOrWhiteSpace(stream.Codecs));
 
             var track = isAudioOnly
                 ? TrackKind.AudioOnly
@@ -59,7 +72,7 @@ public sealed class HlsResolver
                 Bandwidth = stream.AverageBandwidth ?? stream.Bandwidth,
                 FrameRate = isAudioOnly ? null : stream.FrameRate,
                 Codecs = stream.Codecs,
-                Name = isAudioOnly ? "Audio" : null,
+                Name = isAudioOnly ? "Áudio" : null,
                 AudioGroupId = stream.AudioGroupId,
                 SubtitleGroupId = stream.SubtitlesGroupId,
                 Container = isAudioOnly ? "m4a" : GuessContainer(stream.Codecs),
@@ -120,7 +133,7 @@ public sealed class HlsResolver
 
     private static string BuildAudioName(HlsRendition rendition)
     {
-        var name = rendition.Name ?? rendition.Language ?? "Audio";
+        var name = rendition.Name ?? rendition.Language ?? "Áudio";
         if (rendition.Channels is { } channels && channels != "2") name += $" {channels}ch";
         if (rendition.IsDefault) name += " (padrao)";
         return name;
@@ -161,6 +174,13 @@ public sealed class HlsResolver
 
         return Task.FromResult(source);
     }
+
+    /// <summary>
+    /// Positive evidence that a variant carries video: a declared video codec, or a RESOLUTION.
+    /// Either one alone is enough; neither means the variant said nothing about itself.
+    /// </summary>
+    private static bool DeclaresVideo(HlsVariantStream stream) =>
+        CodecInfo.HasVideo(stream.Codecs) || stream.Width is > 0 || stream.Height is > 0;
 
     private static string GuessContainer(string? codecs)
     {

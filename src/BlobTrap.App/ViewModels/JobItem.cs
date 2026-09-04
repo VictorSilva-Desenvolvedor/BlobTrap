@@ -7,9 +7,24 @@ using CommunityToolkit.Mvvm.Input;
 namespace BlobTrap.App.ViewModels;
 
 /// <summary>One row in the downloads list, mirroring a <see cref="DownloadJob"/> onto the UI thread.</summary>
+/// <summary>
+/// Fixed display values for the design preview. A real job's State and Progress are written by
+/// the download engine and cannot be set from outside it, so the preview substitutes just those
+/// two while everything else stays a genuine <see cref="DownloadJob"/>.
+/// </summary>
+public sealed record JobPreview(
+    string StateLabel,
+    string DetailLabel,
+    double ProgressPercent,
+    bool IsCompleted = false,
+    bool IsFailed = false,
+    bool CanCancel = true,
+    bool IsIndeterminate = false);
+
 public sealed partial class JobItem : ObservableObject
 {
     private readonly Dispatcher _dispatcher;
+    private readonly JobPreview? _preview;
 
     public JobItem(DownloadJob job, Dispatcher dispatcher)
     {
@@ -17,6 +32,10 @@ public sealed partial class JobItem : ObservableObject
         _dispatcher = dispatcher;
         job.Changed += OnJobChanged;
     }
+
+    public JobItem(DownloadJob job, Dispatcher dispatcher, JobPreview preview)
+        : this(job, dispatcher)
+        => _preview = preview;
 
     public DownloadJob Job { get; }
 
@@ -28,17 +47,18 @@ public sealed partial class JobItem : ObservableObject
 
     public string QualityLabel => Job.Plan.Video.Label;
 
-    public double ProgressPercent => (Job.Progress.Fraction ?? 0) * 100;
+    public double ProgressPercent => _preview?.ProgressPercent ?? (Job.Progress.Fraction ?? 0) * 100;
 
-    public bool IsIndeterminate => Job.Progress.Fraction is null && Job.State is DownloadState.Downloading or DownloadState.Preparing;
+    public bool IsIndeterminate => _preview?.IsIndeterminate
+        ?? (Job.Progress.Fraction is null && Job.State is DownloadState.Downloading or DownloadState.Preparing);
 
-    public string StateLabel => Job.State switch
+    public string StateLabel => _preview?.StateLabel ?? Job.State switch
     {
         DownloadState.Queued => "Na fila",
         DownloadState.Preparing => "Preparando",
         DownloadState.Downloading => Job.Progress.Stage ?? "Baixando",
         DownloadState.Muxing => "Finalizando",
-        DownloadState.Completed => "Concluido",
+        DownloadState.Completed => "Concluído",
         DownloadState.Failed => "Falhou",
         DownloadState.Canceled => "Cancelado",
         _ => Job.State.ToString(),
@@ -48,6 +68,7 @@ public sealed partial class JobItem : ObservableObject
     {
         get
         {
+            if (_preview is not null) return _preview.DetailLabel;
             if (Job.State == DownloadState.Failed) return Job.ErrorMessage ?? "Erro desconhecido";
 
             if (Job.State == DownloadState.Completed)
@@ -69,11 +90,11 @@ public sealed partial class JobItem : ObservableObject
         }
     }
 
-    public bool CanCancel => !Job.IsFinished;
+    public bool CanCancel => _preview?.CanCancel ?? !Job.IsFinished;
 
-    public bool IsCompleted => Job.State == DownloadState.Completed;
+    public bool IsCompleted => _preview?.IsCompleted ?? Job.State == DownloadState.Completed;
 
-    public bool IsFailed => Job.State == DownloadState.Failed;
+    public bool IsFailed => _preview?.IsFailed ?? Job.State == DownloadState.Failed;
 
     [RelayCommand]
     private void Cancel() => Job.Cancel();

@@ -86,7 +86,7 @@ public sealed class MediaVariant
             switch (Track)
             {
                 case TrackKind.AudioOnly:
-                    parts.Add(string.IsNullOrWhiteSpace(Name) ? "Audio" : Name!);
+                    parts.Add(string.IsNullOrWhiteSpace(Name) ? "Áudio" : Name!);
                     break;
                 case TrackKind.Subtitle:
                     parts.Add("Legenda" + (Language is not null ? $" ({Language})" : string.Empty));
@@ -103,7 +103,7 @@ public sealed class MediaVariant
             var codec = FriendlyCodec();
             if (codec is not null) parts.Add(codec);
 
-            if (Track == TrackKind.VideoOnly) parts.Add("sem audio");
+            if (Track == TrackKind.VideoOnly) parts.Add("sem áudio");
             if (IsLive) parts.Add("AO VIVO");
 
             return string.Join(" - ", parts);
