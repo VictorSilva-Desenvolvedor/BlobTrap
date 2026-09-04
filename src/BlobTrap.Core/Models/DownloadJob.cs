@@ -93,7 +93,8 @@ public sealed record DownloadProgress
 /// <summary>A queued or running download, with its live state.</summary>
 public sealed class DownloadJob
 {
-    private readonly CancellationTokenSource _cts = new();
+    private readonly object _sync = new();
+    private CancellationTokenSource _cts = new();
 
     public DownloadJob(DownloadPlan plan)
     {
@@ -120,16 +121,34 @@ public sealed class DownloadJob
     /// </summary>
     public IReadOnlyList<string> Warnings { get; internal set; } = Array.Empty<string>();
 
-    public CancellationToken CancellationToken => _cts.Token;
+    public CancellationToken CancellationToken
+    {
+        get { lock (_sync) return _cts.Token; }
+    }
+
     public bool IsFinished => State is DownloadState.Completed or DownloadState.Failed or DownloadState.Canceled;
+
+    /// <summary>
+    /// Falha que a repeticao nao resolve: DRM. Tentar de novo devolveria exatamente o mesmo
+    /// erro, e oferecer o botao seria mentir sobre o que o BlobTrap faz.
+    /// </summary>
+    public bool IsPermanentFailure { get; internal set; }
+
+    /// <summary>
+    /// Um job que falhou ou foi cancelado pode voltar para a fila. Concluido nao: o arquivo
+    /// ja esta la, e refazer por cima seria destruir o resultado sem o usuario pedir.
+    /// </summary>
+    public bool CanRetry =>
+        (State is DownloadState.Failed or DownloadState.Canceled) && !IsPermanentFailure;
 
     public void Cancel()
     {
-        if (IsFinished) return;
+        CancellationTokenSource source;
+        lock (_sync) source = _cts;
 
         try
         {
-            _cts.Cancel();
+            source.Cancel();
         }
         catch (ObjectDisposedException)
         {
@@ -138,7 +157,35 @@ public sealed class DownloadJob
         }
     }
 
-    internal void DisposeToken() => _cts.Dispose();
+    /// <summary>
+    /// Zera o job para uma nova tentativa: token novo, progresso, erro e avisos limpos.
+    ///
+    /// O plano fica intocado - e justamente ele que torna a nova tentativa barata, porque a
+    /// qualidade, a faixa de audio e o destino ja foram escolhidos e continuam validos.
+    /// </summary>
+    internal bool TryPrepareForRetry()
+    {
+        lock (_sync)
+        {
+            if (!CanRetry) return false;
+
+            // A fonte antiga so pode ser descartada aqui, e nao no fim do job: ate a nova
+            // tentativa a interface ainda le o token para decidir se mostra "Cancelar".
+            _cts.Dispose();
+            _cts = new CancellationTokenSource();
+            State = DownloadState.Queued;
+            Progress = new DownloadProgress();
+            ErrorMessage = null;
+            Warnings = Array.Empty<string>();
+            CompletedAt = null;
+            Attempt++;
+
+            return true;
+        }
+    }
+
+    /// <summary>Quantas vezes este job ja rodou. 1 na primeira, 2 na primeira retentativa.</summary>
+    public int Attempt { get; private set; } = 1;
 
     /// <summary>Raised on the thread that made the change; the UI marshals it.</summary>
     public event EventHandler? Changed;

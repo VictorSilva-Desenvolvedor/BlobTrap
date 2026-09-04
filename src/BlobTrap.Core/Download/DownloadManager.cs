@@ -38,6 +38,25 @@ public sealed class DownloadManager : IDisposable
         set => _slots.SetLimit(Math.Clamp(value, 1, MaxAllowedConcurrent));
     }
 
+    /// <summary>
+    /// Devolve um job que falhou (ou foi cancelado) para a fila.
+    ///
+    /// O plano inteiro ja esta guardado no job, entao a nova tentativa nao custa ao usuario
+    /// renavegar, redetectar e reescolher qualidade - que era exatamente o preco de um 403
+    /// tardio ou de uma queda de rede depois dos retries do MediaHttpClient.
+    /// </summary>
+    /// <returns>false quando o job nao esta em estado de retentativa (concluido, ou ja na fila).</returns>
+    public bool Retry(DownloadJob job)
+    {
+        if (!job.TryPrepareForRetry()) return false;
+
+        Notify(job);
+        _pending.Enqueue(job);
+        _ = Task.Run(PumpAsync);
+
+        return true;
+    }
+
     public IReadOnlyList<DownloadJob> Jobs
     {
         get { lock (_sync) return _jobs.ToList(); }
@@ -117,16 +136,15 @@ public sealed class DownloadManager : IDisposable
         catch (DrmProtectedException ex)
         {
             job.ErrorMessage = ex.Message;
+
+            // Repetir nao muda o resultado: a interface nao vai oferecer "Tentar de novo".
+            job.IsPermanentFailure = true;
             Transition(job, DownloadState.Failed);
         }
         catch (Exception ex)
         {
             job.ErrorMessage = ex.Message;
             Transition(job, DownloadState.Failed);
-        }
-        finally
-        {
-            job.DisposeToken();
         }
     }
 

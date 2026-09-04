@@ -19,22 +19,25 @@ public sealed record JobPreview(
     bool IsCompleted = false,
     bool IsFailed = false,
     bool CanCancel = true,
-    bool IsIndeterminate = false);
+    bool IsIndeterminate = false,
+    bool CanRetry = false);
 
 public sealed partial class JobItem : ObservableObject
 {
     private readonly Dispatcher _dispatcher;
     private readonly JobPreview? _preview;
+    private readonly Func<DownloadJob, bool>? _retry;
 
-    public JobItem(DownloadJob job, Dispatcher dispatcher)
+    public JobItem(DownloadJob job, Dispatcher dispatcher, Func<DownloadJob, bool>? retry = null)
     {
         Job = job;
         _dispatcher = dispatcher;
+        _retry = retry;
         job.Changed += OnJobChanged;
     }
 
     public JobItem(DownloadJob job, Dispatcher dispatcher, JobPreview preview)
-        : this(job, dispatcher)
+        : this(job, dispatcher, retry: null)
         => _preview = preview;
 
     public DownloadJob Job { get; }
@@ -96,8 +99,14 @@ public sealed partial class JobItem : ObservableObject
 
     public bool IsFailed => _preview?.IsFailed ?? Job.State == DownloadState.Failed;
 
+    /// <summary>Falhou ou foi cancelado, e a fila sabe como reenfileirar.</summary>
+    public bool CanRetry => _preview?.CanRetry ?? (_retry is not null && Job.CanRetry);
+
     [RelayCommand]
     private void Cancel() => Job.Cancel();
+
+    [RelayCommand]
+    private void Retry() => _retry?.Invoke(Job);
 
     private void OnJobChanged(object? sender, EventArgs e)
     {
@@ -114,7 +123,9 @@ public sealed partial class JobItem : ObservableObject
         OnPropertyChanged(nameof(CanCancel));
         OnPropertyChanged(nameof(IsCompleted));
         OnPropertyChanged(nameof(IsFailed));
+        OnPropertyChanged(nameof(CanRetry));
         CancelCommand.NotifyCanExecuteChanged();
+        RetryCommand.NotifyCanExecuteChanged();
     }
 
     public void Detach() => Job.Changed -= OnJobChanged;
