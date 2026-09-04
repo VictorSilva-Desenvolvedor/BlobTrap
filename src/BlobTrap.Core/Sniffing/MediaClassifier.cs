@@ -41,6 +41,13 @@ public static class MediaClassifier
     {
         "/ads/", "/advert", "/preroll", "/midroll", "/beacon", "/pixel", "/tracking",
 
+        // Sons da caixa de busca por voz do YouTube (no_input/success/failure.mp3, ~6 KB cada).
+        // Sao audio de verdade, entao nem o classificador nem o corte por tamanho os pegam - o
+        // corte nao vale para audio de proposito, porque audio curto e' conteudo legitimo.
+        // O fragmento e' estreito de proposito: descreve um caminho de assets de UI conhecido,
+        // e nao uma heuristica sobre "audio pequeno" que acabaria escondendo conteudo real.
+        "/s/search/audio/",
+
     };
 
     public static MediaKind Classify(Uri url, string? mimeType)
