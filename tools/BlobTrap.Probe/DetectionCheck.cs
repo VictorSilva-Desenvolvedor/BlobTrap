@@ -18,7 +18,8 @@ public enum DetectionExpectation
     Arquivo,
 
     /// <summary>
-    /// Precisa aparecer algo que renda vídeo — arquivo de vídeo ou manifesto.
+    /// Precisa aparecer algo que renda vídeo — arquivo, manifesto, ou a página entregue ao
+    /// extrator.
     ///
     /// Existe porque <see cref="QualquerMidia"/> é frouxo demais para uma página de vídeo: no
     /// primeiro relatório desta ferramenta o alvo do YouTube "passou" tendo detectado apenas
@@ -57,12 +58,7 @@ public sealed record DetectionTarget(string Name, string Url, DetectionExpectati
             "https://developer.apple.com/streaming/examples/basic-stream-osx-ios5.html",
             DetectionExpectation.Stream),
 
-        // Dois alvos DASH ja' foram descartados aqui, e por motivos diferentes: o
-        // "reference player" da DASH-IF abre esperando um clique em Load, e o
-        // "getting-started/hello-world" simplesmente nao existe (404). Os dois davam
-        // "nenhum manifesto" sem que houvesse nada errado no BlobTrap - alvo ruim mente
-        // igual a bug, e mente mais barato. Este sample carrega e toca sozinho.
-        new DetectionTarget(
+new DetectionTarget(
             "DASH público (dash.js)",
             "https://reference.dashif.org/dash.js/latest/samples/advanced/monitoring.html",
             DetectionExpectation.Stream),
@@ -154,7 +150,7 @@ public static class DetectionCheck
                 "nenhum manifesto HLS/DASH apareceu"),
 
             DetectionExpectation.Video => Require(
-                observations.Any(o => o.Kind is MediaKind.ProgressiveVideo || o.Kind.IsStreaming()),
+                observations.Any(RendeVideo),
                 "vídeo detectado",
                 observations.Count == 0
                     ? "nenhuma mídia detectada"
@@ -189,6 +185,22 @@ public static class DetectionCheck
             Observations = observations,
         };
     }
+
+    /// <summary>
+    /// Se esta observação entrega vídeo ao usuário.
+    ///
+    /// Uma página vale, mas só depois de resolvida. Num site de MSE/SABR — YouTube desde a
+    /// migração para UMP — a resposta certa do BlobTrap não é uma URL de mídia: é a página,
+    /// que o yt-dlp sabe extrair. Recusar isso reprovaria o comportamento correto.
+    ///
+    /// O que não vale é a página crua: um <c>PageEmbed</c> sem formato nenhum é uma linha na
+    /// lista que falha quando alguém clica — e é assim que aparece quando o yt-dlp não está
+    /// instalado. Exigir as qualidades é o que separa "extraiu" de "chutou a página".
+    /// </summary>
+    private static bool RendeVideo(DetectionObservation observation) =>
+        observation.Kind is MediaKind.ProgressiveVideo
+        || observation.Kind.IsStreaming()
+        || (observation.Kind is MediaKind.PageEmbed && observation.VariantCount > 0);
 
     private static (bool Ok, string Summary) Require(bool condition, string onPass, string onFail) =>
         (condition, condition ? onPass : onFail);
@@ -271,7 +283,7 @@ public static class DetectionCheck
     {
         DetectionExpectation.Stream => "um manifesto HLS ou DASH",
         DetectionExpectation.Arquivo => "um arquivo progressivo",
-        DetectionExpectation.Video => "um vídeo — arquivo ou manifesto",
+        DetectionExpectation.Video => "um vídeo — arquivo, manifesto, ou a página já extraída",
         DetectionExpectation.RecusaPorDrm => "reconhecer o DRM e recusar",
         _ => "qualquer mídia baixável",
     };
