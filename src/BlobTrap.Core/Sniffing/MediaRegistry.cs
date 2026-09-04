@@ -66,11 +66,22 @@ public sealed class MediaRegistry
         RequestContext request,
         Uri? pageUrl = null,
         string? pageTitle = null,
-        long? contentLength = null)
+        long? contentLength = null,
+        string? resourceType = null)
     {
         if (Options.FilterNoise && MediaClassifier.IsNoise(url)) return null;
 
         var kind = MediaClassifier.Classify(url, mimeType);
+
+        // O navegador é a última palavra quando URL e mime não dizem nada.
+        //
+        // O CDP marca cada resposta com um ResourceType, e "Media" significa que o próprio
+        // Chrome entregou aquilo a um elemento <video>/<audio>. Isso resolve a família de
+        // casos que nenhuma heurística de URL alcança: CDN que serve mídia sem extensão no
+        // caminho (o áudio do TikTok é /video/tos/<hash>, sem ponto) e servidor que responde
+        // application/octet-stream. Antes essa informação chegava no evento e era descartada.
+        if (kind == MediaKind.Unknown) kind = MediaClassifier.FromResourceType(resourceType, mimeType);
+
         if (kind == MediaKind.Unknown) return null;
 
         if (kind == MediaKind.MediaSegment)
@@ -82,8 +93,14 @@ public sealed class MediaRegistry
         if (!Options.IncludeSubtitles && kind == MediaKind.Subtitle) return null;
         if (!Options.IncludeAudio && kind == MediaKind.ProgressiveAudio) return null;
 
+        // Só vídeo entra no corte por tamanho.
+        //
+        // Áudio é legitimamente pequeno — um recado de voz, um trecho de podcast, um sample
+        // de 29 KB são conteúdo de verdade, e sumiam num limiar pensado para vídeo. Quem não
+        // quer áudio na lista já tem a opção própria (`IncludeAudio`), que é uma decisão
+        // explícita em vez de um efeito colateral do tamanho.
         if (Options.MinProgressiveBytes > 0 &&
-            kind is MediaKind.ProgressiveVideo or MediaKind.ProgressiveAudio &&
+            kind is MediaKind.ProgressiveVideo &&
             contentLength is > 0 && contentLength < Options.MinProgressiveBytes)
             return null;
 

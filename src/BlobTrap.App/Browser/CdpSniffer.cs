@@ -133,7 +133,12 @@ public sealed class CdpSniffer : IDisposable
         var merged = MergeHeaders(pending);
         var context = RequestContext.FromHeaders(merged, CurrentPageUrl);
 
-        _registry.Observe(uri, mimeType, context, CurrentPageUrl, CurrentPageTitle, contentLength);
+        // "type" e' o ResourceType do CDP. Quando vale "Media", e' o proprio Chrome dizendo que
+        // entregou este corpo a um elemento de midia - a unica pista que sobra quando a CDN
+        // serve sem extensao no caminho e sem Content-Type util.
+        var resourceType = GetString(root, "type");
+
+        _registry.Observe(uri, mimeType, context, CurrentPageUrl, CurrentPageTitle, contentLength, resourceType);
 
         if (pending is not null) pending.Observed = true;
     }
@@ -173,19 +178,31 @@ public sealed class CdpSniffer : IDisposable
         return headers;
     }
 
-    private static long? ReadContentLength(IReadOnlyDictionary<string, string> headers)
+    /// <summary>
+    /// Tamanho do ATIVO que a resposta representa — não o tamanho desta resposta.
+    ///
+    /// A ordem importa e já esteve invertida. Numa 206 Partial Content, `Content-Length` é o
+    /// tamanho do PEDAÇO e `Content-Range: bytes a-b/total` é o do arquivo. Lendo o
+    /// `Content-Length` primeiro, um filme de 14 MB era registrado como 64 KB — e aí o filtro
+    /// de "ocultar arquivos pequenos" descartava a mídia como se fosse um bumper de anúncio.
+    ///
+    /// Isso não era um caso de canto: todo player moderno busca mídia por range, então valia
+    /// para YouTube, para um .mp4 de 355 MB no archive.org e para qualquer arquivo direto.
+    /// A tela dizia "Nenhuma mídia detectada" com o vídeo tocando na frente do usuário.
+    /// </summary>
+    internal static long? ReadContentLength(IReadOnlyDictionary<string, string> headers)
     {
-        if (headers.TryGetValue("content-length", out var raw) &&
-            long.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var length))
-            return length;
-
-        // A ranged response reports the whole asset size in Content-Range: bytes a-b/total.
         if (headers.TryGetValue("content-range", out var range))
         {
+            // "bytes a-b/total", ou "bytes a-b/*" quando o servidor ainda não sabe o total.
             var slash = range.LastIndexOf('/');
             if (slash >= 0 && long.TryParse(range[(slash + 1)..], NumberStyles.Integer, CultureInfo.InvariantCulture, out var total))
                 return total;
         }
+
+        if (headers.TryGetValue("content-length", out var raw) &&
+            long.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var length))
+            return length;
 
         return null;
     }

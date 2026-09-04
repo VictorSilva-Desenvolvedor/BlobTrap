@@ -84,7 +84,7 @@
 
                 <TextBlock Text="O QUE LISTAR" Style="{StaticResource SectionHeader}" Margin="2,22,0,7"/>
                 <CheckBox x:Name="HideSmallCheck" Margin="2,3"
-                          Content="Ocultar arquivos pequenos (menos de 512 KB)"/>
+                          Content="Ocultar vídeos muito pequenos (menos de 64 KB)"/>
                 <CheckBox x:Name="IncludeAudioCheck" Margin="2,3" Content="Listar arquivos de áudio"/>
                 <CheckBox x:Name="IncludeSubtitlesCheck" Margin="2,3" Content="Listar legendas"/>
 
