@@ -32,7 +32,7 @@ public sealed class DownloadExecutor : IDownloadRunner
         if (plan.Source.IsProtected)
             throw new DrmProtectedException(plan.Source.ProtectionSystem ?? "DRM");
 
-        var workDirectory = Path.Combine(ToolLocator.AppDataDirectory, "temp", job.Id);
+        var workDirectory = Path.Combine(WorkspaceCleaner.TempRoot, job.Id);
         Directory.CreateDirectory(workDirectory);
 
         try
