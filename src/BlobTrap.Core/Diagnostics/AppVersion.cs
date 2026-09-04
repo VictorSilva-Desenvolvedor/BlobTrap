@@ -32,10 +32,14 @@ public static class AppVersion
                 return plus < 0 ? informational : informational[..plus];
             }
 
-            var location = assembly.Location;
-            if (!string.IsNullOrEmpty(location))
+            // Environment.ProcessPath, e nao Assembly.Location: num app publicado como arquivo
+            // unico o assembly esta embutido no executavel e Location devolve string vazia -
+            // este fallback morreria em silencio justamente na distribuicao portatil, que e'
+            // onde ele mais importa, porque nao ha .dll ao lado para inspecionar.
+            var executable = Environment.ProcessPath;
+            if (!string.IsNullOrEmpty(executable))
             {
-                var info = FileVersionInfo.GetVersionInfo(location);
+                var info = FileVersionInfo.GetVersionInfo(executable);
                 if (!string.IsNullOrWhiteSpace(info.FileVersion)) return info.FileVersion!;
             }
 

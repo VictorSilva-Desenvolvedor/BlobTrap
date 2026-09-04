@@ -2,15 +2,25 @@
 #
 #   pwsh installer\build.ps1
 #   pwsh installer\build.ps1 -Version 1.1.0
+#   pwsh installer\build.ps1 -Portable      # so' o .exe, sem instalador
 #
 # The app is published self-contained, so the machine running the installer needs no .NET
 # runtime. WebView2 is still required and the installer checks for it.
+#
+# -Portable produz um executavel unico em dist\, para quem quer rodar sem instalar (pendrive,
+# maquina de terceiro, teste rapido). E' o mesmo binario, empacotado diferente: nao cria
+# atalho, nao aparece em Adicionar/Remover Programas e nao checa o WebView2 antes de abrir -
+# sem o runtime ele abre e avisa na propria janela.
+#
+# Os dados continuam em %LOCALAPPDATA%\BlobTrap nos dois modos, entao o portatil NAO e'
+# isolado: ele compartilha ferramentas, preferencias e perfil do navegador com o instalado.
 
 [CmdletBinding()]
 param(
     [string]$Version,
     [string]$Runtime = 'win-x64',
-    [switch]$SkipPublish
+    [switch]$SkipPublish,
+    [switch]$Portable
 )
 
 $ErrorActionPreference = 'Stop'
@@ -43,6 +53,46 @@ if (-not $Version) {
 }
 
 Write-Host "BlobTrap $Version ($Runtime)" -ForegroundColor Cyan
+
+if ($Portable) {
+    New-Item -ItemType Directory -Force -Path $distDir | Out-Null
+    $portableDir = Join-Path $repoRoot 'publish-portable'
+    if (Test-Path $portableDir) { Remove-Item $portableDir -Recurse -Force }
+
+    Write-Host 'Publicando executavel unico...' -ForegroundColor Cyan
+
+    # Single-file sim, trimming NAO. Sao coisas diferentes e so' a segunda e' perigosa aqui:
+    # o WPF resolve tipos por reflexao e o trimmer remove em silencio o que o XAML precisa em
+    # runtime. Empacotar tudo num arquivo nao mexe em quais tipos existem.
+    dotnet publish $appProject `
+        --configuration Release `
+        --runtime $Runtime `
+        --self-contained true `
+        --output $portableDir `
+        -p:Version=$Version `
+        -p:PublishSingleFile=true `
+        -p:IncludeNativeLibrariesForSelfExtract=true `
+        -p:EnableCompressionInSingleFile=true `
+        -p:PublishTrimmed=false `
+        -p:DebugType=none
+    if ($LASTEXITCODE -ne 0) { throw "dotnet publish falhou ($LASTEXITCODE)" }
+
+    $produced = Join-Path $portableDir 'BlobTrap.exe'
+    if (-not (Test-Path $produced)) { throw "Publish nao produziu BlobTrap.exe em $portableDir" }
+
+    # A promessa do portatil e' "um arquivo so'". Se sobrou qualquer outra coisa ao lado, ela
+    # foi perdida no caminho ate o usuario - melhor falhar aqui do que entregar quebrado.
+    $extras = Get-ChildItem $portableDir -Recurse -File | Where-Object { $_.Name -ne 'BlobTrap.exe' }
+    if ($extras) { throw "O publish portatil deixou arquivos soltos: $($extras.Name -join ', ')" }
+
+    $target = Join-Path $distDir "BlobTrap-$Version-portable.exe"
+    Move-Item $produced $target -Force
+    Remove-Item $portableDir -Recurse -Force
+
+    $mb = (Get-Item $target).Length / 1MB
+    Write-Host ("Pronto: {0} ({1:N1} MB)" -f $target, $mb) -ForegroundColor Green
+    return
+}
 
 if (-not $SkipPublish) {
     if (Test-Path $publishDir) { Remove-Item $publishDir -Recurse -Force }
