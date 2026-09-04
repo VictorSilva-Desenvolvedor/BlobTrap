@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Ferramenta de desenvolvimento, nao parte do produto.
+
+    Fica fora de src/ de proposito: nada aqui e' publicado pelo installer/build.ps1, e o
+    BlobTrap.App nao referencia este projeto - a seta aponta so' para ca'. Se um dia isto
+    sumir, o app continua compilando e instalando igual.
+  -->
+  <PropertyGroup>
+    <!--
+      Exe, e nao WinExe, mesmo usando WPF: a ferramenta se le' no terminal. Com WinExe o
+      processo nao recebe console e tudo que ela escreve some - inclusive o motivo de um
+      alvo ter falhado, que e' o produto dela.
+    -->
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>BlobTrap.Probe</RootNamespace>
+    <AssemblyName>BlobTrap.Probe</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\BlobTrap.Core\BlobTrap.Core.csproj" />
+    <ProjectReference Include="..\..\src\BlobTrap.App\BlobTrap.App.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>BlobTrap.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+</Project>
