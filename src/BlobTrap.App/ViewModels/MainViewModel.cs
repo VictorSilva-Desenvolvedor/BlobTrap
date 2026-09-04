@@ -41,7 +41,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Registry = new MediaRegistry();
         ApplySnifferOptions();
 
-        _resolver = new MediaResolver(_http);
+        _resolver = new MediaResolver(_http) { Registry = Registry };
         _executor = new DownloadExecutor(_http, _resolver) { SegmentParallelism = Settings.SegmentParallelism };
 
         Downloads = new DownloadManager(_executor) { MaxConcurrent = Settings.MaxConcurrentDownloads };

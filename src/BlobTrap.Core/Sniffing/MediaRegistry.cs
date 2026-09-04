@@ -38,6 +38,9 @@ public sealed class MediaRegistry
     private readonly ConcurrentDictionary<string, MediaCandidate> _candidates = new();
     private readonly ConcurrentDictionary<string, SegmentFamily> _families = new();
 
+    /// <summary>Pacotes cujo manifesto se provou protegido, por host + diretorio.</summary>
+    private readonly ConcurrentDictionary<string, string> _protegidos = new(StringComparer.Ordinal);
+
     private readonly object _sync = new();
 
     public SnifferOptions Options { get; } = new();
@@ -134,12 +137,16 @@ public sealed class MediaRegistry
             }
             else
             {
+                var protecao = ProtectionFor(url);
+
                 candidate = new MediaCandidate(url, kind, request)
                 {
                     MimeType = mimeType,
                     ContentLength = contentLength,
                     PageUrl = pageUrl,
                     PageTitle = pageTitle,
+                    IsProtected = protecao is not null,
+                    ProtectionSystem = protecao,
                 };
                 _candidates[key] = candidate;
                 isNew = true;
@@ -151,6 +158,46 @@ public sealed class MediaRegistry
 
         return candidate;
     }
+
+    /// <summary>
+    /// Registra que o manifesto deste pacote se provou protegido por DRM, e propaga isso para
+    /// os arquivos que moram ao lado dele.
+    ///
+    /// A recusa a DRM valia so' para o manifesto. Os ativos do MESMO pacote apareciam na lista
+    /// como arquivo de video comum - e baixa-los entregava centenas de megabytes de bytes
+    /// cifrados que nao tocam em lugar nenhum. O README promete recusa explicita; entregar o
+    /// arquivo cifrado e' pior do que recusar, porque o usuario so' descobre depois do download.
+    ///
+    /// O escopo e' host + diretorio do manifesto, que e' como um pacote CMAF/DASH e' publicado:
+    /// manifesto e representacoes lado a lado. Marca o que ja esta na lista e o que chegar
+    /// depois - a ordem em que o player pede as coisas nao pode mudar o resultado.
+    /// </summary>
+    public void MarkPackageProtected(Uri manifestUrl, string? protectionSystem)
+    {
+        var prefixo = MediaClassifier.SegmentFamilyKey(manifestUrl);
+        _protegidos[prefixo] = protectionSystem ?? "DRM";
+
+        List<MediaCandidate> afetados;
+
+        lock (_sync)
+        {
+            afetados = _candidates.Values
+                .Where(c => !c.IsProtected && MediaClassifier.SegmentFamilyKey(c.Url) == prefixo)
+                .ToList();
+
+            foreach (var c in afetados)
+            {
+                c.IsProtected = true;
+                c.ProtectionSystem = protectionSystem;
+            }
+        }
+
+        foreach (var c in afetados) CandidateUpdated?.Invoke(this, c);
+    }
+
+    /// <summary>O sistema de DRM que protege este pacote, ou null quando ele nao e' protegido.</summary>
+    public string? ProtectionFor(Uri url) =>
+        _protegidos.TryGetValue(MediaClassifier.SegmentFamilyKey(url), out var sistema) ? sistema : null;
 
     /// <summary>
     /// Registra a pagina como candidata quando o player usa um protocolo que so' o extrator
@@ -249,6 +296,7 @@ public sealed class MediaRegistry
     {
         _candidates.Clear();
         _families.Clear();
+        _protegidos.Clear();
         Cleared?.Invoke(this, EventArgs.Empty);
     }
 }

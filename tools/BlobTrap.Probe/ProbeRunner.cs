@@ -67,7 +67,14 @@ public sealed class ProbeRunner : IDisposable
     public ProbeRunner(ProbeOptions options)
     {
         _options = options;
-        _resolver = new MediaResolver(_http) { YtDlp = YtDlpRunner.TryCreate() };
+        // Registry ligado de propósito: é assim que o app roda, e é o que faz um manifesto
+        // protegido contaminar os arquivos cifrados do mesmo pacote. Sem esta linha a sonda
+        // mede um BlobTrap que não existe — e o defeito nº 3 continuaria invisível para ela.
+        _resolver = new MediaResolver(_http)
+        {
+            YtDlp = YtDlpRunner.TryCreate(),
+            Registry = _registry,
+        };
     }
 
     /// <summary>Escrita de progresso; o Program manda para o console.</summary>
