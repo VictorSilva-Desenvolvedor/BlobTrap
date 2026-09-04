@@ -58,9 +58,20 @@ public sealed record DetectionTarget(string Name, string Url, DetectionExpectati
             "https://developer.apple.com/streaming/examples/basic-stream-osx-ios5.html",
             DetectionExpectation.Stream),
 
-new DetectionTarget(
-            "DASH público (dash.js)",
-            "https://reference.dashif.org/dash.js/latest/samples/advanced/monitoring.html",
+        // Este alvo e' o manifesto, nao uma pagina de player, e a escolha custou tres
+        // tentativas: o "reference player" da DASH-IF espera um clique em Load; o
+        // "getting-started/hello-world" e' 404; e o sample "advanced/monitoring" nunca
+        // sossega - a pagina segue descobrindo midia ate' o orcamento acabar, e o veredito
+        // sai "tempo esgotado" sem nada errado no BlobTrap. Os tres reprovavam o app pelo
+        // defeito do alvo, que e' o pior tipo de medicao: mente na direcao de dar trabalho.
+        //
+        // Navegar direto ao .mpd mede o DashParser e o DashResolver contra a CDN de hoje,
+        // que e' o que este alvo existe para provar. O que ele NAO cobre e' o caminho MSE
+        // ate' o manifesto - isso fica com os alvos do YouTube e do Widevine, que passam por
+        // dash.js e por blob:.
+        new DetectionTarget(
+            "DASH público (manifesto direto)",
+            "https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd",
             DetectionExpectation.Stream),
 
         new DetectionTarget(
