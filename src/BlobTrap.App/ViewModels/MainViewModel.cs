@@ -108,6 +108,30 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string? _currentPageTitle;
 
+    /// <summary>
+    /// A dica mostrada quando a lista está vazia.
+    ///
+    /// Ela muda porque a instrução certa depende do que já aconteceu. O texto inicial pede o
+    /// play — mas repetir isso para quem já deu play, e cujo vídeo está rodando na tela, é
+    /// mandar fazer o que já foi feito. Quando a sonda descobre que o player usa `blob:` e
+    /// mesmo assim nada foi capturado, o caminho útil deixa de ser "dê play" e passa a ser o
+    /// botão que extrai a página com o yt-dlp.
+    /// </summary>
+    [ObservableProperty]
+    private string _emptyStateHint = "Abra a página do vídeo e dê play. É o play que faz o player buscar o manifesto.";
+
+    /// <summary>Chamado quando a página revela um player `blob:` (MSE) e nada foi detectado.</summary>
+    public void NotePlayerUsesBlob()
+    {
+        if (Candidates.Count > 0) return;
+
+        EmptyStateHint = HasYtDlp
+            ? "O player desta página entrega o vídeo por blob: (MSE). Se nada aparecer depois "
+              + "do play, use \"Baixar esta página\" — ela extrai com o yt-dlp."
+            : "O player desta página entrega o vídeo por blob: (MSE). Se nada aparecer, instale "
+              + "o yt-dlp em Ferramentas e use \"Baixar esta página\".";
+    }
+
     /// <summary>Raised when the view model wants the browser to navigate somewhere.</summary>
     public event EventHandler<Uri>? NavigationRequested;
 
