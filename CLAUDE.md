@@ -27,7 +27,7 @@ esperar resposta.
 Um commit = uma mudança coerente. O que entra junto é o que quebra junto.
 
 - Não misturar refactor com feature, nem formatação com lógica.
-- Escopo explícito: `feat(collector):`, `fix(redaction):`, `refactor(git):`
+- Escopo explícito: `feat(download):`, `fix(redaction):`, `refactor(hls):`
 - Mudança de comportamento entra com seu teste, no mesmo commit.
 - Se a mensagem precisa de "e" para descrever o que foi feito, são dois commits.
 
@@ -47,16 +47,24 @@ no meio.
 
 Qualidade aqui é verificável, não adjetivo:
 
-- Tipagem estrita. `any` / `type: ignore` só com justificativa escrita na linha.
-- Falha nunca é silenciosa: erro é tratado ou sobe. Nada de `catch {}` vazio.
-- Lógica de risco tem teste: normalização, diff, redaction de segredo, parsing.
+- Tipagem estrita. `#pragma warning disable` só com justificativa escrita na
+  linha. Aviso do compilador é erro (`TreatWarningsAsErrors`).
+- Falha nunca é silenciosa: erro é tratado ou sobe. Nada de `catch {}` vazio —
+  todo `catch` que engole explica por escrito o que está engolindo e por quê.
+- Lógica de risco tem teste: parsing de manifesto (HLS, DASH), decriptação
+  AES-128, redaction de segredo, fila de download, nomeação de arquivo.
 - **Idempotência**: rodar duas vezes sem mudança de ambiente não pode produzir
-  resultado diferente.
-- **Nenhum segredo em disco versionado.** Redaction é caminho crítico e é
-  testada com casos reais (token em env var, chave em settings, caminho de
-  usuário).
-- Fronteiras respeitadas: coleta não conhece git; git não conhece VS Code.
-  Adapters isolados atrás de uma interface.
+  resultado diferente. Vale para a varredura de temporários, para a redaction e
+  para o instalador de ferramentas.
+- **Nenhum segredo em disco.** O BlobTrap manipula o Cookie de sessão do usuário
+  e tokens assinados de CDN. Redaction é caminho crítico e é testada com casos
+  reais: `hdnts` da Akamai, `Policy`/`Signature` do CloudFront, `X-Amz-*` do S3,
+  cabeçalho `Cookie`, e o caminho do perfil do usuário. O log é o arquivo que a
+  pessoa anexa num relato de bug — ele não pode conter a sessão dela.
+- Fronteiras respeitadas: **Core não conhece WPF; App não conhece HTTP de
+  mídia.** O sniffer CDP mora no App porque depende do WebView2; o motor HLS e
+  DASH não sabe que existe navegador. Ferramenta externa fica atrás de um runner
+  (`FfmpegRunner`, `YtDlpRunner`), nunca chamada direto.
 - Prazo não é critério de aceite. Se ficou ruim, refaz.
 
 ## 6. Fluxo de entrega
