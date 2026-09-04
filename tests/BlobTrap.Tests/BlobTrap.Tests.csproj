@@ -22,6 +22,13 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\BlobTrap.Core\BlobTrap.Core.csproj" />
     <ProjectReference Include="..\..\src\BlobTrap.App\BlobTrap.App.csproj" />
+
+    <!--
+      A ferramenta de dev (tools/BlobTrap.Probe) nao entra no produto, mas o veredito dela
+      decide sobre o produto: um "passou" errado esconde regressao de deteccao. A regra de
+      julgamento e o relatorio sao codigo puro e ficam cobertos aqui.
+    -->
+    <ProjectReference Include="..\..\tools\BlobTrap.Probe\BlobTrap.Probe.csproj" />
   </ItemGroup>
 
 </Project>

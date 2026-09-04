@@ -35,3 +35,30 @@ workflow de CI.
 
 **Quando houver certificado:** descomentar `SignTool` e `SignedUninstaller` no
 `.iss`. Nada mais precisa mudar no build.
+
+---
+
+## Alvo DASH da sonda estoura o tempo limite
+
+**Arquivo:** `tools/BlobTrap.Probe` — alvo "DASH público (dash.js)",
+`https://reference.dashif.org/dash.js/latest/samples/advanced/monitoring.html`
+
+**Sintoma:** `Erro: tempo esgotado (45s)`. O alvo nunca chega a reportar candidato
+nem player; os outros quatro terminam entre 6 e 10 segundos.
+
+**Hipótese:** é a página, não o BlobTrap. O `monitoring.html` do dash.js carrega
+um painel de métricas com dependências externas pesadas, e o dash.if já se provou
+instável nesta bateria — dois alvos anteriores dele foram descartados como falso
+alarme (o "reference player" exige clique em Load, e `hello-world.html` responde
+404). Um terceiro alvo do mesmo host falhando por conta própria é o padrão, não a
+exceção.
+
+**Por que não corrigi agora:** o defeito, se existir, é da sonda ou da escolha de
+alvo — as duas coisas são da sessão `blobtrap-2a`, que construiu a ferramenta. E
+o caminho DASH do produto está coberto por outro alvo que passa (o manifesto
+Widevine é DASH e é reconhecido), além dos testes de `DashParser`.
+
+**Próximo passo sugerido:** trocar por um MPD estático e estável — por exemplo
+`https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd`, que respondeu
+`application/dash+xml` em 04/09/2026 — ou subir o limite só desse alvo e
+confirmar se é lentidão ou travamento.

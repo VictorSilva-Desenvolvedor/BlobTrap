@@ -29,17 +29,42 @@ public sealed class MediaResolver
     /// <summary>Set when yt-dlp is installed; enables the fallback path and page extraction.</summary>
     public YtDlpRunner? YtDlp { get; set; } = YtDlpRunner.TryCreate();
 
+    /// <summary>
+    /// Quando ligado, um manifesto que se prova protegido marca o pacote inteiro no registro.
+    ///
+    /// Fica aqui, e nao em quem chama, porque descobrir DRM e' o resolvedor que faz. Deixar a
+    /// marcacao a cargo do chamador significava que cada porta de entrada precisava lembrar de
+    /// fazer isso - e a que esquecesse voltaria a oferecer os arquivos cifrados do pacote como
+    /// download livre, que e' exatamente o defeito que isto conserta.
+    /// </summary>
+    public Sniffing.MediaRegistry? Registry { get; set; }
+
     public async Task<MediaSource> ResolveAsync(MediaCandidate candidate, CancellationToken cancellationToken)
     {
+        // Ja sabemos que este candidato pertence a um pacote protegido: o manifesto ao lado
+        // dele se provou DRM. Sem esta recusa, ResolveProgressiveAsync devolvia uma fonte
+        // normal e o arquivo cifrado voltava a ser oferecido como download livre - a marca
+        // existia no candidato e ninguem a consultava.
+        if (candidate.IsProtected)
+            throw new DrmProtectedException(candidate.ProtectionSystem ?? "DRM");
+
         Exception? primaryFailure = null;
 
         try
         {
             var source = await ResolvePrimaryAsync(candidate, cancellationToken).ConfigureAwait(false);
+
+            if (source is { IsProtected: true })
+                Registry?.MarkPackageProtected(candidate.Url, source.ProtectionSystem);
+
             if (source is not null && source.Variants.Count > 0) return source;
         }
         catch (OperationCanceledException) { throw; }
-        catch (DrmProtectedException) { throw; }
+        catch (DrmProtectedException ex)
+        {
+            Registry?.MarkPackageProtected(candidate.Url, ex.Message);
+            throw;
+        }
         catch (Exception ex)
         {
             primaryFailure = ex;
