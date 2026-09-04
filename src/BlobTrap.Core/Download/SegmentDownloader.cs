@@ -14,7 +14,7 @@ public sealed record SegmentProgress(int Done, int Total, long BytesReceived, do
 public sealed class SegmentDownloader
 {
     private readonly MediaHttpClient _http;
-    private readonly ConcurrentDictionary<string, Task<byte[]>> _keyCache = new();
+    private readonly ConcurrentDictionary<string, byte[]> _keyCache = new();
 
     public SegmentDownloader(MediaHttpClient http) => _http = http;
 
@@ -99,8 +99,25 @@ public sealed class SegmentDownloader
         return Decrypt(bytes, key, part.Iv);
     }
 
-    private Task<byte[]> GetKeyAsync(Uri keyUri, RequestContext context, CancellationToken cancellationToken) =>
-        _keyCache.GetOrAdd(keyUri.AbsoluteUri, _ => _http.GetBytesAsync(keyUri, context, null, cancellationToken));
+    /// <summary>
+    /// Busca a chave AES uma vez por URL, e não uma vez por segmento — uma playlist de duas
+    /// mil partes com a mesma chave faria duas mil requisições idênticas.
+    ///
+    /// O cache guarda os bytes, não a <see cref="Task"/> que os buscou. Guardando a Task, ela
+    /// ficava amarrada ao <see cref="CancellationToken"/> de quem chegou primeiro: se aquela
+    /// primeira busca fosse cancelada, todo segmento seguinte reusava a Task cancelada e
+    /// falhava por um motivo que já não existia mais.
+    /// </summary>
+    private async Task<byte[]> GetKeyAsync(Uri keyUri, RequestContext context, CancellationToken cancellationToken)
+    {
+        if (_keyCache.TryGetValue(keyUri.AbsoluteUri, out var cached)) return cached;
+
+        var key = await _http.GetBytesAsync(keyUri, context, null, cancellationToken).ConfigureAwait(false);
+
+        // Duas buscas simultâneas da mesma chave devolvem bytes iguais, então quem chegar
+        // segundo pode simplesmente perder a corrida: o desperdício é uma requisição.
+        return _keyCache.GetOrAdd(keyUri.AbsoluteUri, key);
+    }
 
     /// <summary>HLS AES-128 is plain CBC with PKCS#7 padding over the whole segment.</summary>
     internal static byte[] Decrypt(byte[] data, byte[] key, byte[]? iv)
