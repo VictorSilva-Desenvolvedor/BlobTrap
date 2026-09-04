@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using BlobTrap.Core.Diagnostics;
 using BlobTrap.Core.Tools;
 
 namespace BlobTrap.App.Settings;
@@ -55,6 +56,7 @@ public sealed class AppSettings
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
         {
             // A corrupt settings file must never stop the app from starting.
+            Log.Warn("config", "settings.json ilegivel; usando os padroes", ex);
             return new AppSettings();
         }
     }
@@ -74,6 +76,7 @@ public sealed class AppSettings
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             // Losing preferences is preferable to crashing on shutdown.
+            Log.Warn("config", "nao foi possivel gravar settings.json", ex);
         }
     }
 }

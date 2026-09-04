@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using BlobTrap.Core.Diagnostics;
 using BlobTrap.Core.Models;
 using BlobTrap.Core.Resolving;
 
@@ -50,6 +51,7 @@ public sealed class DownloadManager : IDisposable
     {
         if (!job.TryPrepareForRetry()) return false;
 
+        Log.Info("download", $"[{job.Id}] reenfileirado para nova tentativa");
         Notify(job);
         _pending.Enqueue(job);
         _ = Task.Run(PumpAsync);
@@ -99,6 +101,7 @@ public sealed class DownloadManager : IDisposable
             return;
         }
 
+        Log.Info("download", $"[{job.Id}] tentativa {job.Attempt}: {job.Plan.Video.Label} -> {job.OutputPath}");
         Transition(job, DownloadState.Preparing);
 
         // Progresso aplicado na propria thread que reporta, e nao por Progress<T>.
@@ -127,10 +130,16 @@ public sealed class DownloadManager : IDisposable
             await _executor.ExecuteAsync(job, progress, job.CancellationToken).ConfigureAwait(false);
 
             job.CompletedAt = DateTimeOffset.Now;
+
+            var elapsed = job.CompletedAt.Value - job.CreatedAt;
+            Log.Info("download", $"[{job.Id}] concluido em {elapsed.TotalSeconds:F0}s"
+                + (job.Warnings.Count > 0 ? $" com avisos: {string.Join("; ", job.Warnings)}" : string.Empty));
+
             Transition(job, DownloadState.Completed);
         }
         catch (OperationCanceledException)
         {
+            Log.Info("download", $"[{job.Id}] cancelado pelo usuario");
             Transition(job, DownloadState.Canceled);
         }
         catch (DrmProtectedException ex)
@@ -139,11 +148,16 @@ public sealed class DownloadManager : IDisposable
 
             // Repetir nao muda o resultado: a interface nao vai oferecer "Tentar de novo".
             job.IsPermanentFailure = true;
+            Log.Info("download", $"[{job.Id}] recusado: {ex.Message}");
             Transition(job, DownloadState.Failed);
         }
         catch (Exception ex)
         {
             job.ErrorMessage = ex.Message;
+
+            // A excecao inteira, e nao so a Message que a UI mostra: e' aqui que fica o unico
+            // registro de POR QUE a CDN recusou, e sem ele o relato de bug vira adivinhacao.
+            Log.Error("download", $"[{job.Id}] falhou", ex);
             Transition(job, DownloadState.Failed);
         }
     }

@@ -1,3 +1,4 @@
+using BlobTrap.Core.Diagnostics;
 using BlobTrap.Core.Hls;
 using BlobTrap.Core.Models;
 using BlobTrap.Core.Net;
@@ -42,6 +43,7 @@ public sealed class MediaResolver
         catch (Exception ex)
         {
             primaryFailure = ex;
+            Log.Warn("resolver", $"resolvedor nativo falhou para {Redaction.ScrubUrl(candidate.Url)}", ex);
         }
 
         var fallback = await TryExternalAsync(candidate, cancellationToken).ConfigureAwait(false);
@@ -147,7 +149,12 @@ public sealed class MediaResolver
                 if (source is { Variants.Count: > 0 }) return source;
             }
             catch (OperationCanceledException) { throw; }
-            catch (Exception) { /* try the next target */ }
+            catch (Exception ex)
+            {
+                // Segue para o proximo alvo, mas registra: quando os dois falham, a mensagem
+                // final so diz que nao deu - e a razao de cada tentativa fica so aqui.
+                Log.Warn("resolver", $"yt-dlp nao resolveu {Redaction.ScrubUrl(target)}", ex);
+            }
         }
 
         return null;
