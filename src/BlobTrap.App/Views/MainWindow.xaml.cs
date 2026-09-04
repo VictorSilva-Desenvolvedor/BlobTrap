@@ -139,9 +139,10 @@ public partial class MainWindow : Window, IMediaPicker
     private void OnBlobSourceDetected(object? sender, string blobUrl) =>
         Dispatcher.BeginInvoke(() =>
         {
-            _viewModel.StatusText = _viewModel.Candidates.Count == 0
-                ? "Player usando blob: (MSE). Comece a reproduzir o vídeo para capturar o manifesto."
-                : _viewModel.StatusText;
+            if (_viewModel.Candidates.Count > 0) return;
+
+            _viewModel.StatusText = "Player usando blob: (MSE). Comece a reproduzir o vídeo para capturar o manifesto.";
+            _viewModel.NotePlayerUsesBlob();
         });
 
     private static Uri? SafeUri(string? value) =>

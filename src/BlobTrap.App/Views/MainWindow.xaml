@@ -170,7 +170,7 @@
                                 <TextBlock Style="{StaticResource CaptionMuted}" HorizontalAlignment="Center"
                                            TextAlignment="Center" TextWrapping="Wrap" MaxWidth="270"
                                            Margin="0,7,0,0" LineHeight="18"
-                                           Text="Abra a página do vídeo e dê play. É o play que faz o player buscar o manifesto."/>
+                                           Text="{Binding EmptyStateHint}"/>
                             </StackPanel>
 
                             <ListBox Grid.Row="1" x:Name="CandidateList" ItemsSource="{Binding Candidates}"

@@ -43,15 +43,26 @@ Um commit = uma mudança coerente. O que entra junto é o que quebra junto.
 
 ## 4. Problema encontrado no caminho
 
-Ao esbarrar num problema fora do tópico atual:
+Erro encontrado é erro tratado. Ao esbarrar num problema fora do tópico atual,
+**resolver ou registrar — e seguir**. Nunca só mencionar.
 
 - **Pequeno, seguro e verificável** → corrige, mas em **commit próprio**, para
   não contaminar o commit do tópico principal (regra 3).
-- **Grande, arriscado ou ambíguo** → registra em `BACKLOG.md` com arquivo,
-  linha, sintoma e hipótese.
+- **Grande, arriscado ou ambíguo, ou depende de decisão que não é minha** →
+  registra em `BACKLOG.md` com arquivo, linha, sintoma e hipótese.
+
+**Não perguntar "quer que eu olhe?".** Se dá para resolver agora, resolve; se não
+dá, documenta. A pergunta transfere para o dono do projeto um trabalho de triagem
+que quem achou o problema já tem contexto para fazer, e o custo de decidir errado
+é baixo: um item a mais no `BACKLOG.md` não machuca ninguém.
+
+Perguntar continua certo no caso da regra 2 — quando duas abordagens razoáveis
+divergem em algo que muda o desenho. Aí a pergunta é sobre **como** resolver, não
+sobre **se** vale resolver.
 
 Não silenciar, não consertar na marra, e nunca abandonar o tópico principal
-no meio.
+no meio. Um problema citado num relatório e não registrado em lugar nenhum conta
+como silenciado: quando a conversa termina, ele deixa de existir.
 
 ## 5. Padrão de qualidade
 
@@ -84,8 +95,22 @@ Nada vai direto para `main`.
 1. Branch a partir da `main` atualizada: `feat/…`, `fix/…`, `chore/…`
 2. Commits atômicos na branch (regra 3).
 3. PR descrevendo o que muda e por quê.
-4. Merge na `main`.
-5. Apaga a branch — remota e local.
-6. `git checkout main && git pull` antes da próxima tarefa.
+4. CI verde.
+5. Merge na `main`.
+6. Apaga a branch — remota e local.
+7. `git checkout main && git pull` antes da próxima tarefa.
 
-Proibido: commit direto na `main`, `push --force` na `main`.
+**Commit feito é fluxo até o fim.** Os sete passos são um bloco: quem chega ao 2
+vai até o 7 na mesma tarefa. Não existe "abri o PR, me avise quando quiser
+mesclar" — PR aberto é trabalho pela metade, e trabalho pela metade acumula até
+alguém precisar reconstruir de cabeça o que cada branch fazia.
+
+Parar antes do fim só quando **o dono do projeto pedir** para revisar antes do
+merge, ou quando a CI reprovar (aí o passo seguinte é consertar, não esperar).
+
+**PR empilhado: retargetar o de cima ANTES de apagar a branch de baixo.** Apagar
+a base fecha o PR que aponta para ela — aconteceu com o #12, que precisou ser
+recriado como #13.
+
+Proibido: commit direto na `main`, `push --force` na `main`. Força é permitida em
+branch de trabalho não mesclada, com `--force-with-lease`.
