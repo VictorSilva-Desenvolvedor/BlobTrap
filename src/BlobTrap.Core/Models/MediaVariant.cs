@@ -103,7 +103,17 @@ public sealed class MediaVariant
             var codec = FriendlyCodec();
             if (codec is not null) parts.Add(codec);
 
-            if (Track == TrackKind.VideoOnly) parts.Add("sem áudio");
+            // "sem áudio" NÃO entra aqui.
+            //
+            // O rótulo descreve a faixa; que ela seja só de vídeo é normal em DASH e no HLS
+            // com EXT-X-MEDIA, e o BlobTrap junta com a faixa de áudio escolhida ao lado.
+            // Repetir o aviso em cada linha dizia ao usuário exatamente o oposto do que ia
+            // acontecer: num vídeo do YouTube as 31 opções apareciam como "sem áudio" e o
+            // arquivo final saía com som.
+            //
+            // O aviso continua existindo, mas só onde é verdade e muda a decisão: quando a
+            // origem não tem nenhuma faixa de áudio para parear, o diálogo diz que o arquivo
+            // sairá mudo. Ver `QualityWindow.BuildWarning`.
             if (IsLive) parts.Add("AO VIVO");
 
             return string.Join(" - ", parts);

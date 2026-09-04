@@ -148,7 +148,11 @@ public class MediaVariantTests
         Assert.Contains("60fps", variant.Label);
         Assert.Contains("4.5 Mbps", variant.Label);
         Assert.Contains("H.264", variant.Label);
-        Assert.Contains("sem áudio", variant.Label);
+
+        // O rotulo descreve a faixa, nao o que falta nela. Faixa so' de video e' o normal em
+        // DASH e em HLS com EXT-X-MEDIA, e o BlobTrap junta com o audio escolhido ao lado -
+        // avisar "sem audio" em cada linha dizia ao usuario o oposto do que ia acontecer.
+        Assert.DoesNotContain("sem áudio", variant.Label);
     }
 
     [Fact]
