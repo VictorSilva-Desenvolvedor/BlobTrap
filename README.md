@@ -24,6 +24,12 @@ captura.
   capturados do request original são reenviados, senão a CDN devolve 403.
 - **Faixas separadas**: quando o vídeo vem sem áudio (o normal em DASH e em HLS com
   `EXT-X-MEDIA`), o BlobTrap baixa as duas e junta com ffmpeg.
+- **Retomar de onde parou**: cancelou, caiu a rede ou faltou luz no meio de um filme de 4 GB?
+  Os segmentos já baixados ficam no disco e a próxima tentativa continua dali. Vale para
+  stream segmentado e para arquivo direto.
+- **Tentar de novo**: um 403 tardio não custa renavegar e reescolher qualidade — o botão
+  reenfileira com a mesma escolha. Falha por DRM não oferece o botão, porque repetir daria
+  exatamente o mesmo erro.
 
 ## Interface
 
@@ -112,7 +118,8 @@ src/BlobTrap.Core/          # tudo que não é UI
   Hls/                      # parser de playlist M3U8 (RFC 8216)
   Dash/                     # parser de MPD e expansão de templates de segmento
   Resolving/                # manifesto -> lista de qualidades selecionáveis
-  Download/                 # download paralelo, AES-128, fila
+  Download/                 # download paralelo, AES-128, fila, retomada
+  Diagnostics/              # log em arquivo e redaction de segredo
   Tools/                    # ffmpeg, yt-dlp, instalador com checksum
   Net/                      # HttpClient com retry e replay de contexto
 src/BlobTrap.App/           # WPF
@@ -120,7 +127,7 @@ src/BlobTrap.App/           # WPF
   Theming/                  # tema do sistema, paleta de acento, efeitos de janela
   ViewModels/  Views/
 installer/                  # script Inno Setup e build
-tests/BlobTrap.Tests/       # 144 testes
+tests/BlobTrap.Tests/       # 259 testes
 ```
 
 ## Testes
@@ -141,3 +148,27 @@ Cobrem o que quebra silenciosamente:
   estoura quando a janela abre.
 - **Paleta de acento**: decodificação com cor assimétrica nas duas ordens de bytes possíveis.
   Testar com o verde desta máquina não provaria nada, porque nele o vermelho é igual ao azul.
+- **Redaction**: com os formatos que aparecem de verdade — `hdnts` da Akamai,
+  `Policy`/`Signature` do CloudFront, `X-Amz-*` do S3, cabeçalho `Cookie`, caminho do perfil.
+  O log é o arquivo que a pessoa anexa num relato de bug; ele não pode conter a sessão dela.
+- **Retomada de segmentado**: um servidor HTTP local de verdade derruba o download no meio e
+  o teste prova duas coisas — que a retomada produz bytes idênticos aos de baixar de uma vez,
+  e que os segmentos já gravados não voltam para a rede. Sem essa segunda parte o teste
+  passaria com a retomada desligada, porque rebaixar tudo também dá os bytes certos.
+- **Fila de download**: limite de concorrência sob carga, e estado final que não regride —
+  um download concluído que a interface jura estar baixando não estoura em lugar nenhum.
+
+A suíte roda sem rede, sem ffmpeg e sem yt-dlp, exceto o teste de retomada, que sobe seu
+próprio servidor em `127.0.0.1`.
+
+## Diagnóstico
+
+Quando algo falha, o log fica em `%LOCALAPPDATA%\BlobTrap\logs`, um arquivo por dia e sete
+dias de retenção. Ele registra o ciclo de vida de cada download, a saída de erro do ffmpeg e
+do yt-dlp, e por que o resolvedor caiu para o fallback.
+
+Tudo passa por redaction antes de tocar o disco: token assinado de CDN, cabeçalho `Cookie` e
+o nome de usuário no caminho saem redigidos. Host e caminho ficam, porque sem eles o log não
+diz qual CDN recusou nem qual segmento quebrou.
+
+A versão instalada de cada peça — BlobTrap, ffmpeg e yt-dlp — aparece em **Ferramentas**.
