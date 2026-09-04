@@ -54,6 +54,24 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
+; ---------------------------------------------------------------------------------------
+; Assinatura de codigo
+;
+; O instalador nao e' assinado hoje, entao todo usuario leva um aviso do SmartScreen na
+; primeira execucao - e o aviso e' o mesmo que o Windows daria para um instalador
+; realmente malicioso, o que ensina a pessoa a ignora-lo.
+;
+; Descomentar as duas linhas abaixo assim que houver certificado. Nada mais precisa mudar:
+; o ISCC resolve "assinatura" contra o que estiver registrado em
+; Ferramentas > Configurar programas de assinatura, ou contra /S na linha de comando.
+;
+; Os caminhos possiveis e o que cada um custa estao registrados no BACKLOG.md, para a
+; decisao nao depender de pesquisar tudo de novo.
+;
+; SignTool=assinatura
+; SignedUninstaller=yes
+; ---------------------------------------------------------------------------------------
+
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
