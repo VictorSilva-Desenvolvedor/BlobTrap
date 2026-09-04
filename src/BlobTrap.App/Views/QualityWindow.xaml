@@ -70,8 +70,12 @@
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
-                <TextBlock Grid.Column="0" Text="Faixa de áudio" VerticalAlignment="Center"
-                           Margin="2,0,14,0"/>
+                <!-- Diz o que vai acontecer, em vez de deixar cada linha da lista de qualidade
+                     avisar "sem áudio" e o usuário concluir que o arquivo sairá mudo. -->
+                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="2,0,14,0">
+                    <TextBlock Text="Faixa de áudio"/>
+                    <TextBlock x:Name="AudioHint" Style="{StaticResource CaptionMuted}" Margin="0,2,0,0"/>
+                </StackPanel>
                 <!-- An explicit ItemTemplate, not DisplayMemberPath: the latter is applied
                      through a template *selector*, which the closed box does not consult, so
                      the collapsed ComboBox would fall back to ToString() on the variant. -->

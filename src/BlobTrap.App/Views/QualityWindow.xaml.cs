@@ -86,6 +86,14 @@ public partial class QualityWindow : Window
 
         OutputBox.Text = _viewModel.BuildOutputPath(_source, video, AudioOnlyCheck.IsChecked == true);
 
+        // A lista de qualidade nao repete mais "sem audio" em toda linha; quem explica o que
+        // acontece com o audio e' esta linha, uma vez, ao lado do seletor.
+        AudioHint.Text = video.Track == TrackKind.VideoOnly
+            ? (_viewModel.HasFfmpeg
+                ? "Será juntada ao vídeo escolhido."
+                : "Sem ffmpeg, vídeo e áudio saem em dois arquivos.")
+            : "O vídeo escolhido já tem áudio embutido.";
+
         var warning = BuildWarning(video);
         WarningText.Text = warning;
         WarningPanel.Visibility = warning.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
@@ -98,6 +106,13 @@ public partial class QualityWindow : Window
         // recebe o mesmo erro do executor, so que agora dizendo o que faltou.
         var space = DescribeSpace(video);
         if (space.Length > 0) return space;
+
+        // Faixa so' de video sem nenhum audio para parear: o arquivo sai mudo de verdade.
+        // Este e' o unico caso em que "sem audio" e' informacao - antes ele aparecia em cada
+        // linha da lista, inclusive quando havia audio esperando para ser juntado.
+        if (video.Track == TrackKind.VideoOnly && !_source.AudioVariants.Any())
+            return "Esta faixa é só de vídeo e não há áudio disponível nesta origem: "
+                 + "o arquivo sairá mudo.";
 
         if (video.IsLive)
             return "Transmissão ao vivo: o download captura o que já está no manifesto.";
