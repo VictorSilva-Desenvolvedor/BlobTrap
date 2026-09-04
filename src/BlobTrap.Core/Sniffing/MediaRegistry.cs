@@ -37,6 +37,7 @@ public sealed class MediaRegistry
 {
     private readonly ConcurrentDictionary<string, MediaCandidate> _candidates = new();
     private readonly ConcurrentDictionary<string, SegmentFamily> _families = new();
+
     private readonly object _sync = new();
 
     public SnifferOptions Options { get; } = new();
@@ -70,6 +71,13 @@ public sealed class MediaRegistry
         string? resourceType = null)
     {
         if (Options.FilterNoise && MediaClassifier.IsNoise(url)) return null;
+
+        // Protocolo opaco (UMP/SABR do YouTube): a midia existe, mas dentro de um container
+        // proprio que o motor nativo nao le. Oferecer a URL como arquivo entregaria bytes
+        // inuteis, entao o candidato passa a ser A PAGINA - que e' o que o yt-dlp sabe
+        // extrair. Sem a pagina nao ha o que oferecer, e a resposta e' descartada.
+        if (MediaClassifier.IsOpaqueStreamingProtocol(mimeType))
+            return pageUrl is null ? null : ObserveOpaquePage(pageUrl, request, pageTitle);
 
         var kind = MediaClassifier.Classify(url, mimeType);
 
@@ -140,6 +148,48 @@ public sealed class MediaRegistry
 
         if (isNew) CandidateAdded?.Invoke(this, candidate);
         else CandidateUpdated?.Invoke(this, candidate);
+
+        return candidate;
+    }
+
+    /// <summary>
+    /// Registra a pagina como candidata quando o player usa um protocolo que so' o extrator
+    /// externo le. Uma pagina rende dezenas de respostas dessas; todas caem no mesmo
+    /// candidato, porque a chave e' a URL da pagina.
+    /// </summary>
+    private MediaCandidate? ObserveOpaquePage(Uri pageUrl, RequestContext request, string? pageTitle)
+    {
+        var key = CandidateKey(pageUrl);
+
+        MediaCandidate candidate;
+        bool isNew;
+
+        lock (_sync)
+        {
+            if (_candidates.TryGetValue(key, out var existing))
+            {
+                existing.HitCount++;
+                existing.LastSeen = DateTimeOffset.Now;
+
+                candidate = existing;
+                isNew = false;
+            }
+            else
+            {
+                candidate = new MediaCandidate(pageUrl, MediaKind.PageEmbed, request)
+                {
+                    PageUrl = pageUrl,
+                    PageTitle = pageTitle,
+                };
+
+                _candidates[key] = candidate;
+                isNew = true;
+            }
+        }
+
+        // Fora do lock, como o resto da classe: o assinante e' a UI, e segurar o cadeado
+        // enquanto ela reage transformaria uma disputa de dados numa disputa de threads.
+        if (isNew) CandidateAdded?.Invoke(this, candidate);
 
         return candidate;
     }

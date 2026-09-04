@@ -40,6 +40,7 @@ public static class MediaClassifier
     private static readonly string[] NoisePathFragments =
     {
         "/ads/", "/advert", "/preroll", "/midroll", "/beacon", "/pixel", "/tracking",
+
     };
 
     public static MediaKind Classify(Uri url, string? mimeType)
@@ -177,6 +178,25 @@ public static class MediaClassifier
     /// esse lado deixa a faixa aparecer na lista e o resolvedor descobre o resto ao sondar a
     /// URL; errar para o outro esconde a mídia, que é o que se está tentando corrigir.
     /// </summary>
+    /// <summary>
+    /// Tipos de conteudo que embrulham a midia num protocolo proprio, negociado, que o motor
+    /// nativo do BlobTrap nao fala.
+    ///
+    /// O caso vivo e' o UMP/SABR do YouTube: desde a migracao, o player pede
+    /// <c>/videoplayback?...&amp;sabr=1</c> por POST e recebe
+    /// <c>application/vnd.yt-ump</c> - um container proprio, com os segmentos dentro. A URL
+    /// existe e responde, mas baixa-la direto entrega bytes que nao tocam em lugar nenhum.
+    ///
+    /// Reconhecer isto nao e' para oferecer o arquivo: e' para saber que a PAGINA precisa ir
+    /// para o extrator externo. Ver <c>MediaRegistry.Observe</c>.
+    /// </summary>
+    public static bool IsOpaqueStreamingProtocol(string? mimeType)
+    {
+        var mime = (mimeType ?? string.Empty).Split(';')[0].Trim().ToLowerInvariant();
+
+        return mime is "application/vnd.yt-ump" or "application/vnd.yt-sabr";
+    }
+
     public static MediaKind FromResourceType(string? resourceType, string? mimeType)
     {
         if (!string.Equals(resourceType?.Trim(), "Media", StringComparison.OrdinalIgnoreCase))
