@@ -32,7 +32,12 @@ public sealed class DownloadExecutor : IDownloadRunner
         if (plan.Source.IsProtected)
             throw new DrmProtectedException(plan.Source.ProtectionSystem ?? "DRM");
 
-        var workDirectory = Path.Combine(ToolLocator.AppDataDirectory, "temp", job.Id);
+        // Antes de abrir qualquer socket: um HLS de 4 GB num disco com 1 GB livre baixava por
+        // vinte minutos para morrer com uma IOException generica, deixando o parcial ocupando
+        // o disco que ja estava cheio.
+        DiskSpace.EnsureRoomFor(plan.OutputPath, plan.EstimatedBytes);
+
+        var workDirectory = Path.Combine(WorkspaceCleaner.TempRoot, job.Id);
         Directory.CreateDirectory(workDirectory);
 
         try

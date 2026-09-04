@@ -3,6 +3,7 @@ using System.IO;
 using System.Windows;
 using BlobTrap.App.Theming;
 using BlobTrap.App.ViewModels;
+using BlobTrap.Core.Download;
 using BlobTrap.Core.Models;
 using BlobTrap.Core.Util;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -92,6 +93,12 @@ public partial class QualityWindow : Window
 
     private string BuildWarning(MediaVariant video)
     {
+        // Espaco vem antes das demais: as outras descrevem um resultado pior, esta descreve
+        // um download que nao vai terminar. O dialogo avisa, mas nao bloqueia - quem confirmar
+        // recebe o mesmo erro do executor, so que agora dizendo o que faltou.
+        var space = DescribeSpace(video);
+        if (space.Length > 0) return space;
+
         if (video.IsLive)
             return "Transmissão ao vivo: o download captura o que já está no manifesto.";
 
@@ -105,6 +112,25 @@ public partial class QualityWindow : Window
             return "Sem ffmpeg o arquivo sai como stream bruto (.ts), reproduzível no VLC.";
 
         return string.Empty;
+    }
+
+    /// <summary>
+    /// Avisa quando o volume de destino nao comporta a escolha. Silencioso quando o espaco
+    /// livre nao pode ser lido: "nao sei" nao e' motivo para alarmar ninguem.
+    /// </summary>
+    private string DescribeSpace(MediaVariant video)
+    {
+        var estimate = video.EstimatedBytes;
+        if (estimate is not > 0) return string.Empty;
+
+        var available = DiskSpace.AvailableFor(OutputBox.Text);
+        if (available is null) return string.Empty;
+
+        var required = DiskSpace.RequiredFor(estimate);
+        if (available.Value >= required) return string.Empty;
+
+        return $"Espaco insuficiente no destino: esta qualidade precisa de cerca de "
+             + $"{Naming.FormatBytes(required)} e ha {Naming.FormatBytes(available.Value)} livres.";
     }
 
     private void OnAudioOnlyChanged(object sender, RoutedEventArgs e) => OnSelectionChanged();
