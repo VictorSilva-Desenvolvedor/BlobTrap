@@ -10,37 +10,32 @@ namespace BlobTrap.Core.Download;
 /// </summary>
 public sealed class DownloadManager : IDisposable
 {
-    private readonly DownloadExecutor _executor;
+    /// <summary>Teto do ajuste. Acima disto a rede vira o gargalo e o disco começa a serrar.</summary>
+    public const int MaxAllowedConcurrent = 8;
+
+    private readonly IDownloadRunner _executor;
     private readonly ConcurrentQueue<DownloadJob> _pending = new();
     private readonly List<DownloadJob> _jobs = new();
     private readonly object _sync = new();
-    private SemaphoreSlim _slots;
-    private int _maxConcurrent = 2;
+    private readonly ConcurrencyGate _slots;
 
-    public DownloadManager(DownloadExecutor executor)
+    public DownloadManager(IDownloadRunner executor)
     {
         _executor = executor;
-        _slots = new SemaphoreSlim(_maxConcurrent, _maxConcurrent);
+        _slots = new ConcurrencyGate(2);
     }
 
     public event EventHandler<DownloadJob>? JobAdded;
     public event EventHandler<DownloadJob>? JobChanged;
 
-    /// <summary>How many downloads run at the same time. Changing it takes effect for new jobs.</summary>
+    /// <summary>
+    /// Quantos downloads correm ao mesmo tempo. Reduzir não interrompe o que já está em voo:
+    /// o excedente drena conforme cada um termina.
+    /// </summary>
     public int MaxConcurrent
     {
-        get => _maxConcurrent;
-        set
-        {
-            var clamped = Math.Clamp(value, 1, 8);
-            lock (_sync)
-            {
-                if (clamped == _maxConcurrent) return;
-                _maxConcurrent = clamped;
-                // Replacing the semaphore is safe: running jobs release the instance they took.
-                _slots = new SemaphoreSlim(clamped, clamped);
-            }
-        }
+        get => _slots.Limit;
+        set => _slots.SetLimit(Math.Clamp(value, 1, MaxAllowedConcurrent));
     }
 
     public IReadOnlyList<DownloadJob> Jobs
@@ -57,7 +52,7 @@ public sealed class DownloadManager : IDisposable
         JobAdded?.Invoke(this, job);
         _pending.Enqueue(job);
 
-        _ = Task.Run(() => PumpAsync());
+        _ = Task.Run(PumpAsync);
         return job;
     }
 
@@ -65,8 +60,7 @@ public sealed class DownloadManager : IDisposable
     {
         if (!_pending.TryDequeue(out var job)) return;
 
-        var slots = _slots;
-        await slots.WaitAsync().ConfigureAwait(false);
+        await _slots.AcquireAsync().ConfigureAwait(false);
 
         try
         {
@@ -74,7 +68,7 @@ public sealed class DownloadManager : IDisposable
         }
         finally
         {
-            slots.Release();
+            _slots.Release();
         }
     }
 
@@ -149,9 +143,5 @@ public sealed class DownloadManager : IDisposable
         lock (_sync) _jobs.RemoveAll(j => j.IsFinished);
     }
 
-    public void Dispose()
-    {
-        CancelAll();
-        _slots.Dispose();
-    }
+    public void Dispose() => CancelAll();
 }
