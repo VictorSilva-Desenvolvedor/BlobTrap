@@ -43,15 +43,26 @@ Um commit = uma mudança coerente. O que entra junto é o que quebra junto.
 
 ## 4. Problema encontrado no caminho
 
-Ao esbarrar num problema fora do tópico atual:
+Erro encontrado é erro tratado. Ao esbarrar num problema fora do tópico atual,
+**resolver ou registrar — e seguir**. Nunca só mencionar.
 
 - **Pequeno, seguro e verificável** → corrige, mas em **commit próprio**, para
   não contaminar o commit do tópico principal (regra 3).
-- **Grande, arriscado ou ambíguo** → registra em `BACKLOG.md` com arquivo,
-  linha, sintoma e hipótese.
+- **Grande, arriscado ou ambíguo, ou depende de decisão que não é minha** →
+  registra em `BACKLOG.md` com arquivo, linha, sintoma e hipótese.
+
+**Não perguntar "quer que eu olhe?".** Se dá para resolver agora, resolve; se não
+dá, documenta. A pergunta transfere para o dono do projeto um trabalho de triagem
+que quem achou o problema já tem contexto para fazer, e o custo de decidir errado
+é baixo: um item a mais no `BACKLOG.md` não machuca ninguém.
+
+Perguntar continua certo no caso da regra 2 — quando duas abordagens razoáveis
+divergem em algo que muda o desenho. Aí a pergunta é sobre **como** resolver, não
+sobre **se** vale resolver.
 
 Não silenciar, não consertar na marra, e nunca abandonar o tópico principal
-no meio.
+no meio. Um problema citado num relatório e não registrado em lugar nenhum conta
+como silenciado: quando a conversa termina, ele deixa de existir.
 
 ## 5. Padrão de qualidade
 
