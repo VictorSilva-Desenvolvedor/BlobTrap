@@ -1,0 +1,74 @@
+# Portao de qualidade da regra 6: nada entra na main sem passar por aqui.
+#
+# Roda em windows-latest porque o BlobTrap.App e net8.0-windows com WPF, e a suite de
+# testes tambem - ela carrega dicionarios XAML de verdade para provar que toda chave
+# StaticResource existe. Num runner Linux esses testes nem compilariam, e a cobertura
+# que mais protege o usuario seria justamente a que a CI deixaria de ver.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restaurar
+        run: dotnet restore BlobTrap.sln
+
+      - name: Compilar
+        # Directory.Build.props liga TreatWarningsAsErrors, entao qualquer aviso
+        # novo reprova aqui em vez de virar ruido na saida local.
+        run: dotnet build BlobTrap.sln --configuration Release --no-restore
+
+      - name: Testar
+        run: dotnet test BlobTrap.sln --configuration Release --no-build --verbosity normal
+
+  publish-check:
+    # A publicacao self-contained e o que o instalador consome. Ela quebra por motivos
+    # que um build normal nao pega (RID, trimming, assets do WebView2), e so seria
+    # descoberta na hora de cortar uma release.
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Publicar self-contained
+        run: >
+          dotnet publish src/BlobTrap.App/BlobTrap.App.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          --output publish
+          -p:PublishSingleFile=false
+          -p:DebugType=none
+
+      - name: Conferir que o executavel saiu
+        shell: pwsh
+        run: |
+          if (-not (Test-Path publish/BlobTrap.exe)) { throw 'publish nao produziu BlobTrap.exe' }
+          Write-Host "OK: $((Get-Item publish/BlobTrap.exe).Length) bytes"

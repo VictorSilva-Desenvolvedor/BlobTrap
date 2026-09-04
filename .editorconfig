@@ -1,0 +1,38 @@
+# Convencoes do BlobTrap. O que esta aqui e o que ja e praticado no codigo -
+# nao uma reforma de estilo disfarcada de configuracao.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+
+[*.{cs,xaml,csproj,props,targets,sln}]
+indent_size = 4
+
+[*.{json,yml,yaml,md}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.cs]
+# Namespace com escopo de arquivo: e o que todo arquivo do projeto ja usa.
+csharp_style_namespace_declarations = file_scoped:warning
+
+dotnet_sort_system_directives_first = true
+csharp_using_directive_placement = outside_namespace:silent
+
+dotnet_style_qualification_for_field = false:suggestion
+dotnet_style_qualification_for_property = false:suggestion
+dotnet_style_qualification_for_method = false:suggestion
+
+csharp_style_var_for_built_in_types = true:silent
+csharp_style_var_when_type_is_apparent = true:silent
+csharp_prefer_braces = when_multiline:silent
+
+# CA1416: a Core roda em net8.0 mas alguns helpers so fazem sentido no Windows.
+# O App ja e net8.0-windows e o proprio codigo checa OperatingSystem.IsWindows().
+dotnet_diagnostic.CA1416.severity = none

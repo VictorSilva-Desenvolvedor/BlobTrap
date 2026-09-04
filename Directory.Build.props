@@ -1,0 +1,26 @@
+<Project>
+
+  <!--
+    Propriedades compartilhadas pelos tres projetos. Estavam duplicadas em cada .csproj,
+    onde iam divergir sem ninguem perceber: o dia em que um projeto perder o Nullable e o
+    dia em que ele para de avisar sobre referencia nula, e nada acusa.
+  -->
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+
+    <!--
+      Regra 5 do CLAUDE.md pede tipagem estrita. Aviso que nao quebra o build e aviso que
+      ninguem le: em duas semanas a saida do compilador vira ruido e o proximo aviso real
+      passa junto. Quem precisar de excecao suprime o codigo especifico na linha, com
+      justificativa - que e revisavel, ao contrario de um aviso ignorado.
+    -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+
+    <!-- Determinismo: mesma entrada, mesmo binario, na CI e na maquina do dev. -->
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+</Project>
