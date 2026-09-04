@@ -114,6 +114,12 @@ public sealed class DownloadJob
     public DownloadProgress Progress { get; internal set; } = new();
     public string? ErrorMessage { get; internal set; }
 
+    /// <summary>
+    /// Problems that did not stop the download - a subtitle track that failed, say. The video
+    /// is still delivered, but the user is told what was left behind.
+    /// </summary>
+    public IReadOnlyList<string> Warnings { get; internal set; } = Array.Empty<string>();
+
     public CancellationToken CancellationToken => _cts.Token;
     public bool IsFinished => State is DownloadState.Completed or DownloadState.Failed or DownloadState.Canceled;
 
