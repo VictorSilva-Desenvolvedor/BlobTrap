@@ -191,6 +191,50 @@ public class DetectionCheckTests
         Assert.Contains("DRM: Widevine", relatorio, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Num site de MSE/SABR a resposta certa do BlobTrap é a página entregue ao yt-dlp, não
+    /// uma URL de mídia. Reprovar isso seria reprovar o comportamento correto.
+    /// </summary>
+    [Fact]
+    public void Video_aceita_pagina_que_o_extrator_resolveu()
+    {
+        var resultado = DetectionCheck.Judge(
+            Alvo(DetectionExpectation.Video),
+            new[] { Midia(MediaKind.PageEmbed, variantes: 48) },
+            Instantaneo);
+
+        Assert.Equal(DetectionOutcome.Passou, resultado.Outcome);
+    }
+
+    /// <summary>
+    /// A página sem formato nenhum é o que aparece quando o yt-dlp não está instalado: uma
+    /// linha na lista que falha no clique. Aceitá-la marcaria verde numa máquina onde o
+    /// download não funciona.
+    /// </summary>
+    [Fact]
+    public void Video_recusa_pagina_crua_sem_qualidades()
+    {
+        var resultado = DetectionCheck.Judge(
+            Alvo(DetectionExpectation.Video),
+            new[] { Midia(MediaKind.PageEmbed, variantes: 0) },
+            Instantaneo);
+
+        Assert.Equal(DetectionOutcome.Falhou, resultado.Outcome);
+    }
+
+    /// <summary>Os bipes da caixa de busca do YouTube são mídia, mas não são o vídeo.</summary>
+    [Fact]
+    public void Video_recusa_audio_solto()
+    {
+        var resultado = DetectionCheck.Judge(
+            Alvo(DetectionExpectation.Video),
+            new[] { Midia(MediaKind.ProgressiveAudio) },
+            Instantaneo);
+
+        Assert.Equal(DetectionOutcome.Falhou, resultado.Outcome);
+        Assert.Contains("não é vídeo", resultado.Summary);
+    }
+
     /// <summary>Cada alvo padrão precisa de uma URL absoluta; um typo aqui vira "erro" no relatório.</summary>
     [Fact]
     public void Alvos_padrao_tem_url_valida()

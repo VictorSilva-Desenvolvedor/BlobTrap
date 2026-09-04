@@ -24,6 +24,16 @@ public sealed class ProbeOptions
     /// <summary>Silêncio do sniffer que conta como "a página já mostrou o que tinha".</summary>
     public TimeSpan Quiet { get; init; } = TimeSpan.FromSeconds(6);
 
+    /// <summary>
+    /// Espera máxima pelo fim da navegação.
+    ///
+    /// Separado do orçamento total porque há página que nunca termina de carregar: métrica em
+    /// long-polling, WebSocket aberto, anúncio que nunca resolve. Esperar o fim dessas é
+    /// esperar para sempre, e o sniffer já está capturando desde o primeiro byte — o carregar
+    /// completo nunca foi condição para medir.
+    /// </summary>
+    public TimeSpan NavigationTimeout { get; init; } = TimeSpan.FromSeconds(20);
+
     /// <summary>Quantos candidatos resolver por alvo. Resolver custa rede; os primeiros bastam.</summary>
     public int MaxResolve { get; init; } = 3;
 
@@ -181,7 +191,39 @@ public sealed class ProbeRunner : IDisposable
         {
             using var budget = new CancellationTokenSource(_options.Budget);
 
-            await NavigateAsync(core, target.Url, budget.Token);
+            // Navegação problemática não interrompe a medição, porque ela não é o que se
+            // está medindo: o sniffer captura desde o primeiro byte, e o veredito sai do que
+            // ele viu. Dois casos reais aparecem aqui, e nenhum é defeito do BlobTrap:
+            //
+            //  - a página nunca termina de carregar (métrica em long-polling, socket aberto);
+            //  - a URL é o próprio manifesto, e o navegador a trata como download em vez de
+            //    navegação, o que chega como ConnectionAborted depois de a resposta ter
+            //    passado inteira pelo CDP.
+            //
+            // O motivo fica guardado: se nada for detectado, aí sim ele vira o veredito, e a
+            // pessoa lê "não carregou" em vez de "não detectou".
+            string? falhaDeNavegacao = null;
+
+            using (var navegacao = CancellationTokenSource.CreateLinkedTokenSource(budget.Token))
+            {
+                navegacao.CancelAfter(_options.NavigationTimeout);
+
+                try
+                {
+                    await NavigateAsync(core, target.Url, navegacao.Token);
+                }
+                catch (OperationCanceledException) when (!budget.IsCancellationRequested)
+                {
+                    falhaDeNavegacao = $"a página não terminou de carregar em {_options.NavigationTimeout.TotalSeconds:0}s";
+                    Report($"  aviso: {falhaDeNavegacao}; medindo assim mesmo");
+                }
+                catch (InvalidOperationException ex)
+                {
+                    falhaDeNavegacao = ex.Message;
+                    Report($"  aviso: {falhaDeNavegacao}; medindo assim mesmo");
+                }
+            }
+
             await TryStartPlaybackAsync(core);
             await WaitForQuietAsync(budget.Token);
 
@@ -190,13 +232,15 @@ public sealed class ProbeRunner : IDisposable
 
             var observations = await ObserveAsync(budget.Token);
 
-            var result = DetectionCheck.Judge(target, observations, stopwatch.Elapsed);
+            var result = observations.Count == 0 && falhaDeNavegacao is not null
+                ? DetectionCheck.Judge(target, observations, stopwatch.Elapsed, falhaDeNavegacao)
+                : DetectionCheck.Judge(target, observations, stopwatch.Elapsed);
 
             // Sem play não há tráfego de mídia, e aí um veredito negativo não fala do
             // BlobTrap: fala do autoplay que o Chromium bloqueou. Só rebaixa o que deu
             // negativo — evidência positiva continua valendo, porque um manifesto detectado
             // foi detectado, e há página que entrega a mídia sem elemento <video> nenhum.
-            if (result.Outcome == DetectionOutcome.Falhou && !playback.Started)
+            if (result.Outcome == DetectionOutcome.Falhou && !playback.Started && falhaDeNavegacao is null)
                 result = DetectionCheck.Judge(target, observations, stopwatch.Elapsed,
                     $"o player não chegou a tocar ({playback}) - nada a concluir sobre a detecção");
             Report($"  {result.Outcome}: {result.Summary}");
@@ -332,6 +376,13 @@ public sealed class ProbeRunner : IDisposable
             await Task.Delay(step, cancellationToken);
 
             var count = _registry.Snapshot().Count;
+
+            // Página que descobre mídia sem parar nunca sossega, e a espera consumiria o
+            // orçamento inteiro para terminar em "tempo esgotado" - um erro que fala da
+            // paciência da ferramenta, não da detecção. Cada achado novo é relatado, então
+            // quem lê o console vê a diferença entre "travou" e "ainda está achando coisa".
+            if (count != last) Report($"  ...{count} candidato(s)");
+
             stable = count == last ? stable + step : TimeSpan.Zero;
             last = count;
         }
