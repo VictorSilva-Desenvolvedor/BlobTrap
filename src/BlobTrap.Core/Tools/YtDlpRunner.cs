@@ -54,7 +54,7 @@ public sealed class YtDlpRunner
         }
     }
 
-    private static MediaSource ParseProbe(string json, Uri url, RequestContext context)
+    internal static MediaSource ParseProbe(string json, Uri url, RequestContext context)
     {
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
@@ -99,10 +99,35 @@ public sealed class YtDlpRunner
             ThumbnailUrl = Uri.TryCreate(GetString(root, "thumbnail") ?? string.Empty, UriKind.Absolute, out var thumb) ? thumb : null,
             IsLive = GetBool(root, "is_live") ?? false,
             ResolvedBy = "yt-dlp",
-            Variants = variants
-                .Select(v => v.DurationSeconds is null && duration is not null ? WithDuration(v, duration) : v)
-                .ToList(),
+            Variants = SemDuplicatasVisiveis(variants
+                .Select(v => v.DurationSeconds is null && duration is not null ? WithDuration(v, duration) : v)),
         };
+    }
+
+    /// <summary>
+    /// Tira as opcoes que o usuario nao consegue distinguir uma da outra.
+    ///
+    /// O YouTube publica a mesma faixa por mais de um caminho - HLS e DASH, ou uma variante
+    /// "premium" com os mesmos numeros - e o yt-dlp lista todas. Na tela de qualidade elas
+    /// viram linhas identicas: mesma resolucao, mesmo bitrate, mesmo codec, mesmo tamanho.
+    /// Escolher entre duas linhas iguais nao e' escolha, e' ruido.
+    ///
+    /// A primeira ocorrencia vence porque o yt-dlp ja devolve os formatos em ordem de
+    /// preferencia dele. Faixas que diferem em qualquer coisa que aparece no rotulo continuam
+    /// as duas na lista - o corte e' so' para o que e' visivelmente igual.
+    /// </summary>
+    private static IReadOnlyList<MediaVariant> SemDuplicatasVisiveis(IEnumerable<MediaVariant> variants)
+    {
+        var vistos = new HashSet<string>(StringComparer.Ordinal);
+        var resultado = new List<MediaVariant>();
+
+        foreach (var v in variants)
+        {
+            var chave = string.Join('|', v.Track, v.Label, v.Container, v.SizeLabel);
+            if (vistos.Add(chave)) resultado.Add(v);
+        }
+
+        return resultado;
     }
 
     private static MediaVariant WithDuration(MediaVariant variant, double? duration) => new()
