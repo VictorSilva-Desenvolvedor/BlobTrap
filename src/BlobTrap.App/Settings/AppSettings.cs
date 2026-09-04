@@ -31,8 +31,15 @@ public sealed class AppSettings
 
     public bool IncludeSubtitles { get; set; } = true;
 
-    /// <summary>Files under this size are usually preview loops or ad bumpers, not content.</summary>
-    public long SmallFileThresholdBytes { get; set; } = 512 * 1024;
+    /// <summary>
+    /// Abaixo disto um vídeo é quase sempre bumper de anúncio ou loop de pré-visualização.
+    ///
+    /// Era 512 KB, que é grande demais: escondia clipe curto de verdade — um .webm de 471 KB
+    /// sumia da lista. O trabalho de barrar anúncio é do filtro de ruído, que olha host e
+    /// caminho; o tamanho só precisa dar conta de pixel de rastreio e beacon, que têm alguns
+    /// poucos KB. Vale só para vídeo: áudio é legitimamente pequeno.
+    /// </summary>
+    public long SmallFileThresholdBytes { get; set; } = 64 * 1024;
 
     public static string DefaultDownloadDirectory()
     {

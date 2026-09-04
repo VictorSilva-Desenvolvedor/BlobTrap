@@ -165,6 +165,29 @@ public static class MediaClassifier
         return lower.All(char.IsAsciiDigit);
     }
 
+    /// <summary>
+    /// Traduz o ResourceType que o CDP carimba na resposta.
+    ///
+    /// Só serve como último recurso, quando caminho e mime já falharam: "Media" é o navegador
+    /// dizendo que entregou aquele corpo a um elemento de mídia, o que é mais confiável do que
+    /// qualquer palpite sobre a URL — e é a única pista que sobra quando a CDN serve o arquivo
+    /// sem extensão e sem Content-Type útil.
+    ///
+    /// O mime, quando existe, decide entre áudio e vídeo. Sem ele o padrão é vídeo: errar para
+    /// esse lado deixa a faixa aparecer na lista e o resolvedor descobre o resto ao sondar a
+    /// URL; errar para o outro esconde a mídia, que é o que se está tentando corrigir.
+    /// </summary>
+    public static MediaKind FromResourceType(string? resourceType, string? mimeType)
+    {
+        if (!string.Equals(resourceType?.Trim(), "Media", StringComparison.OrdinalIgnoreCase))
+            return MediaKind.Unknown;
+
+        var mime = (mimeType ?? string.Empty).Split(';')[0].Trim().ToLowerInvariant();
+        if (mime.StartsWith("audio/")) return MediaKind.ProgressiveAudio;
+
+        return MediaKind.ProgressiveVideo;
+    }
+
     public static bool IsNoise(Uri url)
     {
         var host = url.Host;
