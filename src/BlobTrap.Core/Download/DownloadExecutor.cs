@@ -11,7 +11,7 @@ namespace BlobTrap.Core.Download;
 /// final file. Everything format-specific has already been decided by the resolvers, so this
 /// only orchestrates.
 /// </summary>
-public sealed class DownloadExecutor
+public sealed class DownloadExecutor : IDownloadRunner
 {
     private readonly MediaHttpClient _http;
     private readonly MediaResolver _resolver;
