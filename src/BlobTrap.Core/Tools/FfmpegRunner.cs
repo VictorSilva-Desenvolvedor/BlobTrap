@@ -23,6 +23,36 @@ public sealed partial class FfmpegRunner
         return path is null ? null : new FfmpegRunner(path);
     }
 
+    /// <summary>
+    /// Versao reportada pelo binario, ou null quando ele nao responde.
+    ///
+    /// A primeira linha do "ffmpeg -version" e' do tipo
+    /// "ffmpeg version n7.1-latest-win64-gpl Copyright (c) 2000-2024 ...". So o token da
+    /// versao interessa: o resto e' aviso de copyright que nao cabe numa linha de dialogo.
+    /// </summary>
+    public async Task<string?> GetVersionAsync(CancellationToken cancellationToken)
+    {
+        var result = await ProcessRunner.RunAsync(_ffmpegPath, new[] { "-version" }, cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+
+        return result.Success ? ParseVersion(result.StandardOutput) : null;
+    }
+
+    /// <summary>Tira o token de versao da primeira linha. Interno para poder ser testado.</summary>
+    internal static string? ParseVersion(string output)
+    {
+        var firstLine = output.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim();
+        if (string.IsNullOrEmpty(firstLine)) return null;
+
+        var parts = firstLine.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        // "ffmpeg" "version" "<o que interessa>"
+        var marker = Array.FindIndex(parts, p => p.Equals("version", StringComparison.OrdinalIgnoreCase));
+        if (marker >= 0 && marker + 1 < parts.Length) return parts[marker + 1];
+
+        return firstLine.Length > 60 ? firstLine[..60] : firstLine;
+    }
+
     /// <summary>Rewraps a raw stream (concatenated TS or fMP4) into a clean container.</summary>
     public Task RemuxAsync(
         string inputPath,

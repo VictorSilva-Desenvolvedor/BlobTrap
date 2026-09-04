@@ -132,10 +132,22 @@
         </ScrollViewer>
 
         <!-- ===================== Actions ===================== -->
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+        <Grid Grid.Row="2" Margin="0,20,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- A versao do app nao aparecia em lugar nenhum, e e' a primeira pergunta de
+                 qualquer relato de bug - a unica que o usuario nao conseguia responder. -->
+            <TextBlock Grid.Column="0" x:Name="AppVersionText" Style="{StaticResource CaptionMuted}"
+                       VerticalAlignment="Center" Margin="2,0,0,0"/>
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Content="Fechar" Width="104" Margin="0,0,8,0" Click="OnCloseClick"/>
             <Button Content="Salvar" Width="124" Style="{StaticResource AccentButton}"
                     Click="OnSaveClick" IsDefault="True"/>
-        </StackPanel>
+            </StackPanel>
+        </Grid>
     </Grid>
 </Window>
