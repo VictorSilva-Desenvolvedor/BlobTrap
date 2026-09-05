@@ -135,8 +135,9 @@ src/BlobTrap.App/           # WPF
   Browser/                  # sniffer CDP e sonda de DOM
   Theming/                  # tema do sistema, paleta de acento, efeitos de janela
   ViewModels/  Views/
+tools/BlobTrap.Probe/       # autoteste de detecção contra páginas reais
 installer/                  # script Inno Setup e build
-tests/BlobTrap.Tests/       # 259 testes
+tests/BlobTrap.Tests/       # 349 testes
 ```
 
 ## Testes
