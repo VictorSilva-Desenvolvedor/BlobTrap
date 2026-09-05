@@ -35,6 +35,14 @@ captura.
 
 ![Mídias detectadas](docs/tela-midias.png)
 
+Cada item traz o tipo, o tamanho quando o servidor informa e o host de onde veio — o
+bastante para escolher sem abrir o console do navegador.
+
+![Fila de downloads](docs/tela-downloads.png)
+
+A fila mostra progresso, velocidade e quanto falta, e no fim o ffmpeg juntando as faixas.
+As duas últimas linhas falharam: uma oferece **Tentar de novo**, a de DRM não.
+
 | Escolher qualidade | Ferramentas |
 | --- | --- |
 | ![Diálogo de qualidade](docs/tela-qualidade.png) | ![Ferramentas e preferências](docs/tela-ferramentas.png) |
@@ -93,6 +101,7 @@ Para revisar a interface sem navegar nem baixar nada:
 
 ```bash
 dotnet run --project src/BlobTrap.App -- --design-preview
+dotnet run --project src/BlobTrap.App -- --design-preview:downloads
 dotnet run --project src/BlobTrap.App -- --design-preview:quality
 dotnet run --project src/BlobTrap.App -- --design-preview:tools
 ```
@@ -126,8 +135,9 @@ src/BlobTrap.App/           # WPF
   Browser/                  # sniffer CDP e sonda de DOM
   Theming/                  # tema do sistema, paleta de acento, efeitos de janela
   ViewModels/  Views/
+tools/BlobTrap.Probe/       # autoteste de detecção contra páginas reais
 installer/                  # script Inno Setup e build
-tests/BlobTrap.Tests/       # 259 testes
+tests/BlobTrap.Tests/       # 349 testes
 ```
 
 ## Testes
