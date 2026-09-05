@@ -35,6 +35,14 @@ captura.
 
 ![Mídias detectadas](docs/tela-midias.png)
 
+Cada item traz o tipo, o tamanho quando o servidor informa e o host de onde veio — o
+bastante para escolher sem abrir o console do navegador.
+
+![Fila de downloads](docs/tela-downloads.png)
+
+A fila mostra progresso, velocidade e quanto falta, e no fim o ffmpeg juntando as faixas.
+As duas últimas linhas falharam: uma oferece **Tentar de novo**, a de DRM não.
+
 | Escolher qualidade | Ferramentas |
 | --- | --- |
 | ![Diálogo de qualidade](docs/tela-qualidade.png) | ![Ferramentas e preferências](docs/tela-ferramentas.png) |
