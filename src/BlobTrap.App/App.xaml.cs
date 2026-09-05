@@ -13,7 +13,8 @@ public partial class App : Application
     /// <summary>
     /// Opens a window filled with sample data instead of the browser, so the interface can be
     /// reviewed and screenshotted without a network round trip or a real download first.
-    /// An optional suffix picks which window: "--design-preview:quality" or ":tools".
+    /// An optional suffix picks which window: "--design-preview:quality", ":tools" or
+    /// ":downloads".
     /// </summary>
     private const string DesignPreviewFlag = "--design-preview";
 
@@ -57,10 +58,18 @@ public partial class App : Application
         {
             "quality" => new QualityWindow(DesignData.Source(), viewModel),
             "tools" => new ToolsWindow(viewModel),
+            "downloads" => DownloadsPreview(viewModel),
             _ => new MainWindow(viewModel),
         };
 
         window.Show();
+    }
+
+    private static MainWindow DownloadsPreview(MainViewModel viewModel)
+    {
+        var window = new MainWindow(viewModel);
+        window.SelectDownloadsTab();
+        return window;
     }
 
     protected override void OnExit(ExitEventArgs e)

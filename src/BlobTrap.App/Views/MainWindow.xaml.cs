@@ -89,6 +89,12 @@ public partial class MainWindow : Window, IMediaPicker
         if (home is not null) Browser.Source = home;
     }
 
+    /// <summary>
+    /// Opens the window on the downloads tab instead of the detected media one, so the design
+    /// preview can show the queue - progress, a finished job, a refusal - without a real download.
+    /// </summary>
+    internal void SelectDownloadsTab() => Tabs.SelectedIndex = 1;
+
     private void OnNavigationRequested(object? sender, Uri target)
     {
         if (Browser.CoreWebView2 is null)

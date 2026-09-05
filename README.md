@@ -93,6 +93,7 @@ Para revisar a interface sem navegar nem baixar nada:
 
 ```bash
 dotnet run --project src/BlobTrap.App -- --design-preview
+dotnet run --project src/BlobTrap.App -- --design-preview:downloads
 dotnet run --project src/BlobTrap.App -- --design-preview:quality
 dotnet run --project src/BlobTrap.App -- --design-preview:tools
 ```
