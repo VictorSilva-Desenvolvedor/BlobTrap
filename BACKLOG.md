@@ -35,3 +35,31 @@ workflow de CI.
 
 **Quando houver certificado:** descomentar `SignTool` e `SignedUninstaller` no
 `.iss`. Nada mais precisa mudar no build.
+
+---
+
+## Actions da CI ainda declarando Node 20
+
+**Arquivo:** `.github/workflows/ci.yml` — `actions/checkout@v4` e
+`actions/setup-dotnet@v4`, nos dois jobs
+
+**Sintoma:** todo run da CI sai com anotação de aviso nos dois jobs:
+*"Node.js 20 is deprecated. The following actions target Node.js 20 but are
+being forced to run on Node.js 24"*. Nada quebra hoje porque o runner força a
+execução no Node 24; quebra no dia em que ele parar de forçar.
+
+O custo enquanto isso é o aviso virar paisagem: quem olha a CI verde com duas
+anotações amarelas fixas aprende a não ler anotação nenhuma.
+
+**Hipótese:** não é um problema do workflow em si — é decidir para qual major
+subir. Levantado em 2026-09-05, `checkout` está em v7.0.1 e `setup-dotnet` em
+v6.0.0; o BlobTrap está três e dois majors atrás. Qualquer major a partir do v5
+roda em Node 24 e cala o aviso, então a escolha é de manutenção, não de
+correção: subir ao mínimo que resolve, ou ao mais recente e assumir a leitura
+das notas de cada major no caminho.
+
+**Recomendação:** ir direto ao mais recente de cada uma (`checkout@v7`,
+`setup-dotnet@v6`) num PR só. O workflow usa as duas no feijão com arroz —
+checkout raso do commit, instalar o SDK 8 — que é a parte que menos muda entre
+majors, e a própria CI é o teste: se restaurar, compilar, testar e publicar
+self-contained passarem, o caminho está coberto.
