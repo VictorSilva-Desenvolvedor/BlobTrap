@@ -63,3 +63,31 @@ das notas de cada major no caminho.
 checkout raso do commit, instalar o SDK 8 — que é a parte que menos muda entre
 majors, e a própria CI é o teste: se restaurar, compilar, testar e publicar
 self-contained passarem, o caminho está coberto.
+
+---
+
+## Video DownloadHelper salva fora da pasta de downloads do BlobTrap
+
+**Arquivo:** `src/BlobTrap.App/Views/ExtensionsWindow.xaml.cs` — o download parte do service worker da extensão
+
+**Sintoma:** o **Baixar** do VDH grava em `%UserProfile%\Downloads` (medido em 2026-10-17 com
+`HTML Video.mp4`), ignorando a pasta configurada em Ferramentas. O arquivo também não entra na
+fila do BlobTrap, então não aparece na aba de downloads.
+
+**Hipótese:** `CoreWebView2Profile.DefaultDownloadFolderPath` apontado para a pasta configurada
+resolve a pasta. Nem `DownloadStarting` da view do navegador nem o da view do popup dispararam
+no teste, então pôr o arquivo na fila exige descobrir em qual objeto o WebView2 emite o
+download vindo de uma extensão — ou aceitar que downloads do VDH ficam fora da fila.
+
+---
+
+## Recursos do Video DownloadHelper que dependem do CoApp não foram testados
+
+**Arquivo:** `src/BlobTrap.App/Browser/BrowserExtensions.cs`
+
+**Sintoma:** só o download HTTP direto (MP4) foi medido. No Chrome, juntar HLS/DASH e converter
+formato passam pelo CoApp, o app nativo do VDH, via native messaging. Não se sabe se o WebView2
+encaminha native messaging de extensão.
+
+**Hipótese:** é provável que não funcione, e o próprio BlobTrap já cobre HLS/DASH. Testar com um
+manifesto HLS antes de prometer esse caminho ao usuário.
