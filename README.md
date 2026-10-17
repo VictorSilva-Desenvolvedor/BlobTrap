@@ -181,4 +181,17 @@ Tudo passa por redaction antes de tocar o disco: token assinado de CDN, cabeçal
 o nome de usuário no caminho saem redigidos. Host e caminho ficam, porque sem eles o log não
 diz qual CDN recusou nem qual segmento quebrou.
 
+Para conferir **qualidade e áudio** enquanto baixa, o log registra: o que a origem oferecia
+(melhores vídeos e áudios), o plano escolhido, o progresso a cada 10% de cada etapa, e — ao
+terminar — as faixas do arquivo final lidas pelo ffmpeg (codec, resolução, áudio, duração). Os
+avisos (`WARN`) são os casos em que o download termina sem erro mas o resultado não é o
+esperado: arquivo mudo, qualidade abaixo da melhor oferecida, ffmpeg ausente.
+
+Para acompanhar ao vivo, com cor por nível:
+
+```powershell
+powershell -File tools\watch-log.ps1             # tudo
+powershell -File tools\watch-log.ps1 -SoAvisos   # só WARN e ERROR
+```
+
 A versão instalada de cada peça — BlobTrap, ffmpeg e yt-dlp — aparece em **Ferramentas**.
