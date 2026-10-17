@@ -105,6 +105,52 @@ public class RequestContextTests
     }
 
     [Fact]
+    public void FromHeaders_KeepsAPlayersOwnTokenHeaderWhateverItsName()
+    {
+        // The allow-list kept only Authorization and x-*; a header like this was dropped on
+        // replay and the CDN answered 403 to a request the browser had just made.
+        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Token"] = "abc",
+            ["Sec-Fetch-Site"] = "same-site",
+            ["Accept-Language"] = "pt-BR",
+        };
+
+        var context = RequestContext.FromHeaders(headers);
+
+        Assert.Equal("abc", context.ExtraHeaders["Token"]);
+        Assert.True(context.ExtraHeaders.ContainsKey("Sec-Fetch-Site"));
+        Assert.True(context.ExtraHeaders.ContainsKey("Accept-Language"));
+    }
+
+    [Theory]
+    [InlineData("Range")]
+    [InlineData("If-None-Match")]
+    [InlineData("Host")]
+    [InlineData("Content-Length")]
+    [InlineData("Cache-Control")]
+    [InlineData("X-Client-Data")]
+    public void FromHeaders_DropsWhatTheHttpClientOwns(string name)
+    {
+        // Range in particular: the segment downloader sets its own, and a replayed one would
+        // ask every segment for the byte range of whatever request was captured.
+        var context = RequestContext.FromHeaders(new Dictionary<string, string> { [name] = "1" });
+
+        Assert.False(context.ExtraHeaders.ContainsKey(name));
+    }
+
+    [Theory]
+    [InlineData("Authorization", true)]
+    [InlineData("X-Custom-Token", true)]
+    [InlineData("Sec-Fetch-Site", false)]
+    [InlineData("Accept-Language", false)]
+    [InlineData("X-Client-Data", false)]
+    public void IsAuthenticationHeader_IsWhatYtDlpReceives(string name, bool expected)
+    {
+        Assert.Equal(expected, RequestContext.IsAuthenticationHeader(name));
+    }
+
+    [Fact]
     public void FromHeaders_FallsBackToThePageUrlForRefererAndOrigin()
     {
         var context = RequestContext.FromHeaders(

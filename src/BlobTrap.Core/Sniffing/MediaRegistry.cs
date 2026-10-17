@@ -127,6 +127,7 @@ public sealed class MediaRegistry
             {
                 existing.HitCount++;
                 existing.LastSeen = DateTimeOffset.Now;
+                if (IsBetterRequest(request, existing.Request)) existing.Request = request;
                 existing.MimeType ??= mimeType;
                 if (contentLength > existing.ContentLength) existing.ContentLength = contentLength;
                 if (existing.PageUrl is null) existing.PageUrl = pageUrl;
@@ -157,6 +158,44 @@ public sealed class MediaRegistry
         else CandidateUpdated?.Invoke(this, candidate);
 
         return candidate;
+    }
+
+    /// <summary>
+    /// Troca o contexto de um candidato já registrado quando chega um melhor.
+    ///
+    /// O CDP não garante a ordem: o <c>requestWillBeSentExtraInfo</c>, único evento que traz o
+    /// Cookie, pode chegar depois do <c>responseReceived</c>. O candidato nascia então sem a
+    /// sessão, e o download levava 403 de uma CDN que tinha acabado de servir o navegador.
+    /// Devolve true quando trocou.
+    /// </summary>
+    public bool RefreshRequest(Uri url, RequestContext request)
+    {
+        MediaCandidate candidateUpdated;
+
+        lock (_sync)
+        {
+            if (!_candidates.TryGetValue(CandidateKey(url), out var existing)) return false;
+            if (!IsBetterRequest(request, existing.Request)) return false;
+
+            existing.Request = request;
+            candidateUpdated = existing;
+        }
+
+        CandidateUpdated?.Invoke(this, candidateUpdated);
+        return true;
+    }
+
+    /// <summary>
+    /// Com sessão vence sem sessão; entre dois iguais, o mais novo vence, porque token
+    /// assinado e cookie de CDN expiram e o pedido mais recente é o que a CDN acabou de aceitar.
+    /// Sem sessão nunca substitui com sessão: é o caso do ExtraInfo atrasado, ao contrário.
+    /// </summary>
+    internal static bool IsBetterRequest(RequestContext candidate, RequestContext current)
+    {
+        var hasCookie = !string.IsNullOrEmpty(candidate.Cookie);
+        var hadCookie = !string.IsNullOrEmpty(current.Cookie);
+
+        return hasCookie || !hadCookie;
     }
 
     /// <summary>
@@ -217,6 +256,7 @@ public sealed class MediaRegistry
             {
                 existing.HitCount++;
                 existing.LastSeen = DateTimeOffset.Now;
+                if (IsBetterRequest(request, existing.Request)) existing.Request = request;
 
                 candidate = existing;
                 isNew = false;

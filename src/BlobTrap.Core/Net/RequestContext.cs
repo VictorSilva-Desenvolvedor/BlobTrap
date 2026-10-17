@@ -55,19 +55,34 @@ public sealed record RequestContext
     }
 
     /// <summary>
-    /// Headers that carry authorization or CDN-token state and must be replayed. Everything
-    /// else (hop-by-hop, :pseudo, sec-fetch-*, content negotiation) is set by HttpClient itself.
+    /// Headers the browser sent that must not be replayed: the ones HttpClient sets per
+    /// request (framing, compression, range, conditionals) or that describe the browser's own
+    /// cache. Everything else goes back out.
+    ///
+    /// This used to be an allow-list of Authorization plus x-*. A player that authenticates
+    /// with any other name - a course platform's own token header, say - lost it on replay,
+    /// and the CDN answered 403 to a request the browser had just made successfully.
     /// </summary>
-    private static bool IsReplayableHeader(string key)
+    private static readonly HashSet<string> NotReplayed = new(StringComparer.OrdinalIgnoreCase)
     {
-        if (key.StartsWith(':')) return false;
-        return key.ToLowerInvariant() switch
-        {
-            "authorization" or "x-forwarded-for" => true,
-            _ => key.StartsWith("x-", StringComparison.OrdinalIgnoreCase)
-                 && !key.StartsWith("x-client-data", StringComparison.OrdinalIgnoreCase),
-        };
-    }
+        "host", "connection", "keep-alive", "content-length", "transfer-encoding", "te", "trailer",
+        "upgrade", "accept-encoding", "range", "if-range", "if-none-match", "if-modified-since",
+        "if-match", "if-unmodified-since", "cache-control", "pragma", "upgrade-insecure-requests",
+        "x-client-data", "proxy-connection",
+    };
+
+    private static bool IsReplayableHeader(string key) => !key.StartsWith(':') && !NotReplayed.Contains(key);
+
+    /// <summary>
+    /// Headers that authenticate rather than describe the request. yt-dlp applies every
+    /// header it is given to every request it makes - the page, the site's API, the format it
+    /// picked - so it gets only these, never the browser's fetch metadata for one media URL.
+    /// </summary>
+    public static bool IsAuthenticationHeader(string key) =>
+        key.Equals("authorization", StringComparison.OrdinalIgnoreCase)
+        || key.Equals("x-forwarded-for", StringComparison.OrdinalIgnoreCase)
+        || (key.StartsWith("x-", StringComparison.OrdinalIgnoreCase)
+            && !key.Equals("x-client-data", StringComparison.OrdinalIgnoreCase));
 
     public RequestContext WithCookie(string? cookie) => this with { Cookie = cookie };
 

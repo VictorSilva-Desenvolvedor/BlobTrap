@@ -139,4 +139,53 @@ public class MediaRegistryTests
         Assert.Empty(registry.Snapshot());
         Assert.Empty(registry.SegmentFamilies());
     }
+
+    [Fact]
+    public void RefreshRequest_CookieQueChegaDepois_EntraNoCandidato()
+    {
+        // O CDP entrega o ExtraInfo (unico evento com Cookie) depois da resposta as vezes;
+        // o candidato nascia sem a sessao e o download levava 403.
+        var registry = new MediaRegistry();
+        var url = new Uri("https://player.exemplo.com/aula/playlist.m3u8?e=1&g=abc");
+        registry.Observe(url, "application/vnd.apple.mpegurl", new RequestContext());
+
+        var atualizou = registry.RefreshRequest(url, new RequestContext { Cookie = "sessao=1" });
+
+        Assert.True(atualizou);
+        Assert.Equal("sessao=1", registry.Snapshot().Single().Request.Cookie);
+    }
+
+    [Fact]
+    public void ObservacaoRepetidaSemCookie_NaoApagaASessao()
+    {
+        var registry = new MediaRegistry();
+        var url = new Uri("https://cdn.exemplo.com/v/master.m3u8");
+        registry.Observe(url, "application/vnd.apple.mpegurl", new RequestContext { Cookie = "sessao=1" });
+
+        registry.Observe(url, "application/vnd.apple.mpegurl", new RequestContext());
+
+        Assert.Equal("sessao=1", registry.Snapshot().Single().Request.Cookie);
+    }
+
+    [Fact]
+    public void ObservacaoRepetidaComCookie_TrocaPeloMaisNovo()
+    {
+        // Cookie de CDN expira; o pedido mais recente e' o que a CDN acabou de aceitar.
+        var registry = new MediaRegistry();
+        var url = new Uri("https://cdn.exemplo.com/v/master.m3u8");
+        registry.Observe(url, "application/vnd.apple.mpegurl", new RequestContext { Cookie = "sessao=velha" });
+
+        registry.Observe(url, "application/vnd.apple.mpegurl", new RequestContext { Cookie = "sessao=nova" });
+
+        Assert.Equal("sessao=nova", registry.Snapshot().Single().Request.Cookie);
+    }
+
+    [Fact]
+    public void RefreshRequest_UrlDesconhecida_NaoCriaCandidato()
+    {
+        var registry = new MediaRegistry();
+
+        Assert.False(registry.RefreshRequest(new Uri("https://cdn.exemplo.com/x.m3u8"), new RequestContext { Cookie = "a=1" }));
+        Assert.Empty(registry.Snapshot());
+    }
 }

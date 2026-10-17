@@ -111,6 +111,11 @@ public sealed class CdpSniffer : IDisposable
 
         var entry = _pending.GetOrAdd(requestId, static _ => new PendingRequest());
         entry.ExtraHeaders = ReadHeaders(root, "headers");
+        entry.ExtraInfoSeen = true;
+
+        // Arrived after the response: the candidate was registered without the Cookie.
+        if (entry.Observed && Uri.TryCreate(entry.Url, UriKind.Absolute, out var uri))
+            _registry.RefreshRequest(uri, RequestContext.FromHeaders(MergeHeaders(entry), CurrentPageUrl));
     }
 
     private void OnResponseReceived(JsonElement root)
@@ -146,7 +151,13 @@ public sealed class CdpSniffer : IDisposable
     private void OnLoadingFinished(JsonElement root)
     {
         var requestId = GetString(root, "requestId");
-        if (requestId is not null) _pending.TryRemove(requestId, out _);
+        if (requestId is null) return;
+
+        // An observed request still waiting for its ExtraInfo stays, so the Cookie can reach
+        // the candidate when it arrives; TrimPending bounds what is left behind.
+        if (_pending.TryGetValue(requestId, out var entry) && entry.Observed && !entry.ExtraInfoSeen) return;
+
+        _pending.TryRemove(requestId, out _);
     }
 
     private void OnLoadingFailed(JsonElement root) => OnLoadingFinished(root);
@@ -234,5 +245,6 @@ public sealed class CdpSniffer : IDisposable
         public Dictionary<string, string> Headers = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, string> ExtraHeaders = new(StringComparer.OrdinalIgnoreCase);
         public bool Observed;
+        public bool ExtraInfoSeen;
     }
 }
