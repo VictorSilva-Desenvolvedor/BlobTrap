@@ -18,7 +18,8 @@ public static class ProcessRunner
         Action<string>? onStandardOutput = null,
         Action<string>? onStandardError = null,
         string? workingDirectory = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool logFailure = true)
     {
         var startInfo = new ProcessStartInfo
         {
@@ -78,7 +79,7 @@ public static class ProcessRunner
 
         // O stderr do ffmpeg e do yt-dlp diz exatamente o que aconteceu e ate agora era jogado
         // fora quando o processo saia com codigo != 0 sem que ninguem lesse o resultado.
-        if (!result.Success)
+        if (!result.Success && logFailure)
         {
             Log.Error("processo", $"{Path.GetFileName(fileName)} saiu com {result.ExitCode}"
                 + Environment.NewLine + Tail(result.StandardError, 2000));

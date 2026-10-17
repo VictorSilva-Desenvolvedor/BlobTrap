@@ -1,4 +1,5 @@
 using BlobTrap.Core.Models;
+using BlobTrap.Core.Tools;
 using BlobTrap.Core.Util;
 
 namespace BlobTrap.Core.Diagnostics;
@@ -17,6 +18,12 @@ public static class DownloadAudit
 {
     /// <summary>Quantas opções de cada tipo entram no resumo da origem. O resto é ruído.</summary>
     private const int TopCount = 3;
+
+    /// <summary>
+    /// Fração da duração esperada abaixo da qual o arquivo é tido como truncado. Folga de 5%
+    /// porque a duração do manifesto e a do container diferem por arredondamento de segmento.
+    /// </summary>
+    private const double DurationTolerance = 0.95;
 
     /// <summary>Resumo do que o manifesto ou o extrator ofereceu, melhores opções primeiro.</summary>
     public static string DescribeSource(MediaSource source)
@@ -85,6 +92,60 @@ public static class DownloadAudit
         }
 
         if (!ffmpegAvailable) lines.AddRange(MissingFfmpegWarnings(plan));
+
+        return lines;
+    }
+
+    /// <summary>
+    /// Confere o arquivo que saiu contra o que foi pedido. É a resposta final a "baixou na
+    /// qualidade que eu escolhi, e com som?" — lida do arquivo, e não presumida do plano.
+    /// </summary>
+    public static IReadOnlyList<AuditLine> VerifyOutput(DownloadPlan plan, StreamReport report, long? fileBytes)
+    {
+        // Nada lido nao e' "sem audio": e' "nao consegui conferir". Acusar mudo aqui seria
+        // um falso alarme em todo arquivo que o ffmpeg nao abre.
+        if (!report.HasStreams)
+        {
+            return new[]
+            {
+                new AuditLine(LogLevel.Warn, "arquivo final nao pôde ser conferido: o ffmpeg nao leu nenhuma faixa"),
+            };
+        }
+
+        var lines = new List<AuditLine>();
+
+        var parts = report.Streams.Where(s => s.Type != StreamType.Subtitle).Select(s => s.ToString()).ToList();
+        if (report.Duration is { } duration) parts.Add($"duracao {duration:hh\\:mm\\:ss}");
+        if (fileBytes is > 0) parts.Add(Naming.FormatBytes(fileBytes));
+
+        lines.Add(new AuditLine(LogLevel.Info, "arquivo final: " + string.Join(" | ", parts)));
+
+        if (report.Audio is null)
+        {
+            lines.Add(new AuditLine(LogLevel.Warn, "ARQUIVO FINAL SEM AUDIO: nenhuma faixa de audio foi encontrada"));
+        }
+
+        if (plan.AudioOnly) return lines;
+
+        if (report.Video is not { } video)
+        {
+            lines.Add(new AuditLine(LogLevel.Warn, "ARQUIVO FINAL SEM VIDEO: nenhuma faixa de video foi encontrada"));
+            return lines;
+        }
+
+        if (plan.Video.Height is { } wanted && video.Height is { } actual && actual < wanted)
+        {
+            lines.Add(new AuditLine(LogLevel.Warn,
+                $"resolucao do arquivo ({actual}p) menor que a escolhida ({wanted}p)"));
+        }
+
+        var expected = plan.Video.DurationSeconds ?? plan.Source.DurationSeconds;
+        if (expected is > 0 && report.Duration is { } real && real.TotalSeconds < expected.Value * DurationTolerance)
+        {
+            lines.Add(new AuditLine(LogLevel.Warn,
+                $"duracao do arquivo ({real:hh\\:mm\\:ss}) menor que a esperada "
+                + $"({TimeSpan.FromSeconds(expected.Value):hh\\:mm\\:ss}): pode estar truncado"));
+        }
 
         return lines;
     }

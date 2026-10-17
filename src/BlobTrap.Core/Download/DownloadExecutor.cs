@@ -1,3 +1,4 @@
+using BlobTrap.Core.Diagnostics;
 using BlobTrap.Core.Models;
 using BlobTrap.Core.Net;
 using BlobTrap.Core.Resolving;
@@ -54,6 +55,8 @@ public sealed class DownloadExecutor : IDownloadRunner
             if (muxWarning is not null) warnings.Add(muxWarning);
         }
 
+        await AuditOutputAsync(job, FfmpegRunner.TryCreate(), cancellationToken).ConfigureAwait(false);
+
         warnings.AddRange(await DownloadSubtitlesAsync(plan, cancellationToken).ConfigureAwait(false));
         if (warnings.Count > 0) job.Warnings = warnings;
 
@@ -66,6 +69,47 @@ public sealed class DownloadExecutor : IDownloadRunner
         // Pasta de download abandonado nao fica para sempre: WorkspaceCleaner varre o que
         // estiver parado ha mais de seis horas na proxima abertura do app.
         TryDeleteDirectory(workDirectory);
+    }
+
+    /// <summary>
+    /// Abre o arquivo que saiu e registra o que ha nele - faixas, resolucao, duracao - com
+    /// aviso quando falta audio ou a resolucao ficou abaixo da escolhida.
+    ///
+    /// Conferir e' diagnostico, nao requisito: o arquivo ja esta pronto. Por isso nenhuma
+    /// falha aqui derruba o download.
+    /// </summary>
+    internal static async Task AuditOutputAsync(DownloadJob job, FfmpegRunner? ffmpeg, CancellationToken cancellationToken)
+    {
+        var plan = job.Plan;
+
+        if (ffmpeg is null)
+        {
+            Log.Info("download", $"[{job.Id}] sem ffmpeg: o arquivo final nao foi conferido");
+            return;
+        }
+
+        // Sem ffmpeg o resultado sao dois arquivos com outros nomes; aqui nao ha o que abrir.
+        if (!File.Exists(plan.OutputPath)) return;
+
+        try
+        {
+            var report = await ffmpeg.InspectAsync(plan.OutputPath, cancellationToken).ConfigureAwait(false);
+
+            foreach (var line in DownloadAudit.VerifyOutput(plan, report, FileLength(plan.OutputPath)))
+            {
+                var message = $"[{job.Id}] {line.Message}";
+
+                if (line.Level == LogLevel.Warn) Log.Warn("download", message);
+                else Log.Info("download", message);
+            }
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            // Engole: nao conseguir abrir o ffmpeg para conferir nao invalida um arquivo que
+            // ja foi gravado. O registro fica no log, que e' onde quem acompanha vai olhar.
+            Log.Warn("download", $"[{job.Id}] nao foi possivel conferir o arquivo final", ex);
+        }
     }
 
     private async Task RunExternalAsync(DownloadPlan plan, IProgress<DownloadProgress> progress, CancellationToken cancellationToken)

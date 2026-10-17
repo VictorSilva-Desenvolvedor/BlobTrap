@@ -53,6 +53,24 @@ public sealed partial class FfmpegRunner
         return firstLine.Length > 60 ? firstLine[..60] : firstLine;
     }
 
+    /// <summary>
+    /// Lista as faixas de um arquivo. <c>ffmpeg -i</c> sem saida le o arquivo normalmente e
+    /// ainda assim sai com codigo 1 ("At least one output file must be specified"), entao o
+    /// codigo de saida nao diz nada aqui e a falha nao e' registrada como erro: o que importa
+    /// e' se alguma faixa foi lida (<see cref="StreamReport.HasStreams"/>).
+    /// </summary>
+    public async Task<StreamReport> InspectAsync(string path, CancellationToken cancellationToken)
+    {
+        var result = await ProcessRunner.RunAsync(
+                _ffmpegPath,
+                new[] { "-hide_banner", "-nostdin", "-i", path },
+                cancellationToken: cancellationToken,
+                logFailure: false)
+            .ConfigureAwait(false);
+
+        return StreamReport.Parse(result.StandardError);
+    }
+
     /// <summary>Rewraps a raw stream (concatenated TS or fMP4) into a clean container.</summary>
     public Task RemuxAsync(
         string inputPath,
