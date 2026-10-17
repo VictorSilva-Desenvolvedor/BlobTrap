@@ -198,8 +198,19 @@ public partial class MainWindow : Window, IMediaPicker
             return;
         }
 
-        _extensionsWindow = new ExtensionsWindow(Browser.CoreWebView2.Environment, _extensions) { Owner = this };
+        _extensionsWindow = new ExtensionsWindow(Browser.CoreWebView2.Environment, _extensions, ReloadExtensionsAsync)
+        {
+            Owner = this,
+        };
         _extensionsWindow.Show();
+    }
+
+    private async Task<IReadOnlyList<LoadedExtension>> ReloadExtensionsAsync()
+    {
+        if (Browser.CoreWebView2 is not null)
+            _extensions = await BrowserExtensions.LoadAllAsync(Browser.CoreWebView2.Profile);
+
+        return _extensions;
     }
 
     public Task<DownloadPlan?> PickAsync(MediaSource source, string downloadDirectory)

@@ -1,7 +1,10 @@
+using System.IO;
+using System.Net.Http;
 using System.Windows;
 using System.Windows.Controls;
 using BlobTrap.App.Browser;
 using BlobTrap.App.Theming;
+using BlobTrap.Core.Diagnostics;
 using Microsoft.Web.WebView2.Core;
 
 namespace BlobTrap.App.Views;
@@ -13,8 +16,13 @@ namespace BlobTrap.App.Views;
 public partial class ExtensionsWindow : Window
 {
     private readonly CoreWebView2Environment _environment;
+    private readonly Func<Task<IReadOnlyList<LoadedExtension>>> _reload;
 
-    public ExtensionsWindow(CoreWebView2Environment environment, IReadOnlyList<LoadedExtension> extensions)
+    /// <param name="reload">Loads the extensions folder into the browser again, after an install.</param>
+    public ExtensionsWindow(
+        CoreWebView2Environment environment,
+        IReadOnlyList<LoadedExtension> extensions,
+        Func<Task<IReadOnlyList<LoadedExtension>>> reload)
     {
         InitializeComponent();
         WindowFit.ToWorkArea(this);
@@ -22,17 +30,53 @@ public partial class ExtensionsWindow : Window
         WindowEffects.Attach(this);
 
         _environment = environment;
+        _reload = reload;
 
+        Loaded += (_, _) => ShowExtensions(extensions);
+    }
+
+    private void ShowExtensions(IReadOnlyList<LoadedExtension> extensions)
+    {
         var withPopup = extensions.Where(e => e.PopupUri is not null).ToList();
         if (withPopup.Count == 0)
         {
-            ShowEmpty($"Nenhuma extensão com página de botão. Coloque a pasta descompactada da extensão em {BrowserExtensions.Directory} e abra o BlobTrap novamente.");
+            ShowEmpty("Nenhuma extensão instalada. Instale o Video DownloadHelper ou coloque a pasta " +
+                      $"descompactada de outra extensão em {BrowserExtensions.Directory}.");
             return;
         }
 
+        EmptyState.Visibility = Visibility.Collapsed;
+        Popup.Visibility = Visibility.Visible;
         ExtensionCombo.ItemsSource = withPopup;
         ExtensionCombo.Visibility = withPopup.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
-        Loaded += (_, _) => ExtensionCombo.SelectedIndex = 0;
+        ExtensionCombo.SelectedIndex = 0;
+    }
+
+    private async void OnInstallClick(object sender, RoutedEventArgs e)
+    {
+        InstallButton.IsEnabled = false;
+        InstallButton.Content = "Baixando…";
+
+        try
+        {
+            var target = Path.Combine(BrowserExtensions.Directory, "video-downloadhelper");
+            Directory.CreateDirectory(BrowserExtensions.Directory);
+            await CrxPackage.InstallFromStoreAsync(VideoDownloadHelper.Id, target, CancellationToken.None);
+            Log.Info("extensions", "Video DownloadHelper instalado da Chrome Web Store.");
+
+            ShowExtensions(await _reload());
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException
+                                       or InvalidDataException or UnauthorizedAccessException)
+        {
+            Log.Warn("extensions", "Falha ao instalar o Video DownloadHelper", ex);
+            EmptyText.Text = $"Não foi possível instalar: {ex.Message}";
+        }
+        finally
+        {
+            InstallButton.IsEnabled = true;
+            InstallButton.Content = "Instalar Video DownloadHelper";
+        }
     }
 
     private async void OnExtensionSelected(object sender, SelectionChangedEventArgs e)

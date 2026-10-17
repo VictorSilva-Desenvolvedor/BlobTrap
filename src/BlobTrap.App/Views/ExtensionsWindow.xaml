@@ -25,6 +25,9 @@
                        HorizontalAlignment="Center" Foreground="{DynamicResource TextSecondary}"/>
             <TextBlock x:Name="EmptyText" Style="{StaticResource CaptionMuted}" Margin="0,12,0,0"
                        TextWrapping="Wrap" TextAlignment="Center"/>
+            <Button x:Name="InstallButton" Style="{StaticResource AccentButton}" Margin="0,16,0,0"
+                    HorizontalAlignment="Center" Padding="16,6"
+                    Content="Instalar Video DownloadHelper" Click="OnInstallClick"/>
         </StackPanel>
     </Grid>
 </Window>
