@@ -115,11 +115,15 @@ public sealed class DownloadManager : IDisposable
         // ExecuteAsync retorna nao existe mais relatorio pendente.
         //
         // Nao ha custo de thread de UI aqui: quem marshala e o JobItem, no evento Changed.
+        var milestones = new ProgressMilestones();
+
         var progress = new InlineProgress<DownloadProgress>(p =>
         {
             // Segunda trava: estado final e final. Sem isto, qualquer caminho futuro que
             // reporte progresso tarde volta a corromper o estado do mesmo jeito.
             if (job.IsFinished) return;
+
+            if (milestones.Next(p) is { } milestone) Log.Info("download", $"[{job.Id}] {milestone}");
 
             job.Progress = p;
             job.State = p.Stage == "Finalizando" ? DownloadState.Muxing : DownloadState.Downloading;
