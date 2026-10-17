@@ -185,4 +185,65 @@ public class RedactionTests
 
         Assert.Equal(once, Redaction.Scrub(once));
     }
+
+    // Formato real de 2026-10-17, de uma plataforma de curso: HLS assinado com parametros de
+    // uma letra. O log gravou s= e g= inteiros, porque nenhum nome casava com um marcador.
+    // Os valores aqui sao falsos, com a mesma forma.
+    private const string HlsDeCurso =
+        "https://player.exemplo-cursos.com/be4f9472-af2a/480p/video.m3u8" +
+        "?e=1792333176&s=portal%3A39558.AbCd-EfGh1jk&f=1&g=xyz-AbCd-efGhIjK_lMnoP-qr-S5TU6vWxYZabcde";
+
+    [Fact]
+    public void ScrubUrl_TokenOpacoComNomeDeUmaLetra_ERedigidoPeloValor()
+    {
+        var scrubbed = Redaction.ScrubUrl(new Uri(HlsDeCurso));
+
+        Assert.DoesNotContain("AbCd-EfGh1jk", scrubbed);
+        Assert.DoesNotContain("S5TU6vWxYZabcde", scrubbed);
+        Assert.Contains("s=[redigido]", scrubbed);
+        Assert.Contains("g=[redigido]", scrubbed);
+    }
+
+    [Fact]
+    public void ScrubUrl_ExpiracaoNumericaEFlagCurta_Ficam()
+    {
+        // Sao o que diz se o link expirou - a primeira pergunta diante de um 403.
+        var scrubbed = Redaction.ScrubUrl(new Uri(HlsDeCurso));
+
+        Assert.Contains("e=1792333176", scrubbed);
+        Assert.Contains("f=1", scrubbed);
+    }
+
+    [Fact]
+    public void Scrub_UrlSemEsquemaNaSaidaDoYtDlp_TambemERedigida()
+    {
+        // O yt-dlp ecoa so' o fim da URL, sem https://, e o achador de URLs nao a via.
+        const string line = "ERROR: [generic] playlist.m3u8?e=1792247038&s=portal%3A39558.AbCd-EfGh1jk&g=xyz-AbCd-efGhIjK_lMnoP-qr-S5TU6vWxYZ: " +
+                            "Unable to download webpage: HTTP Error 403: Forbidden";
+
+        var scrubbed = Redaction.Scrub(line);
+
+        Assert.DoesNotContain("AbCd-EfGh1jk", scrubbed);
+        Assert.DoesNotContain("S5TU6vWxYZ", scrubbed);
+        Assert.Contains("e=1792247038", scrubbed);
+        Assert.Contains("HTTP Error 403", scrubbed);
+    }
+
+    [Theory]
+    [InlineData("1792333176")]                                    // expiracao
+    [InlineData("AWS4-HMAC-SHA256")]                              // algoritmo, sem minuscula
+    [InlineData("Agentes%20de%20IA%20com%20Python%3A%20OpenAI2")] // texto legivel
+    [InlineData("aqz-KE-bpKQ")]                                   // id de video, curto
+    public void IsSecretValue_NaoRedigeValorComum(string value)
+    {
+        Assert.False(Redaction.IsSecretValue(value));
+    }
+
+    [Fact]
+    public void Scrub_TokenOpaco_EhIdempotente()
+    {
+        var once = Redaction.Scrub("falhou " + HlsDeCurso);
+
+        Assert.Equal(once, Redaction.Scrub(once));
+    }
 }
