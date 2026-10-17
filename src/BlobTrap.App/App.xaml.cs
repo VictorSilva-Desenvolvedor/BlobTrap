@@ -4,6 +4,7 @@ using BlobTrap.App.ViewModels;
 using BlobTrap.App.Views;
 using BlobTrap.Core.Diagnostics;
 using BlobTrap.Core.Download;
+using BlobTrap.Core.Tools;
 using BlobTrap.Core.Util;
 
 namespace BlobTrap.App;
@@ -23,6 +24,7 @@ public partial class App : Application
         base.OnStartup(e);
 
         Log.Info("app", $"BlobTrap {AppVersion.Current} iniciando");
+        Log.Info("app", "ferramentas: " + string.Join(", ", Enum.GetValues<ExternalTool>().Select(DescribeTool)));
 
         // Brushes have to exist before the first window resolves its DynamicResource bindings.
         ThemeManager.Initialize();
@@ -48,6 +50,14 @@ public partial class App : Application
 
         ShowDesignPreview(preview[DesignPreviewFlag.Length..].TrimStart(':', '='));
     }
+
+    /// <summary>
+    /// Onde cada ferramenta foi achada, ou "AUSENTE". Sem ffmpeg o video e o audio de uma fonte
+    /// DASH/HLS saem em arquivos separados; saber isso na primeira linha do log poupa abrir a
+    /// pasta de downloads para descobrir.
+    /// </summary>
+    private static string DescribeTool(ExternalTool tool) =>
+        $"{tool}={ToolLocator.Find(tool) ?? "AUSENTE"}";
 
     private void ShowDesignPreview(string target)
     {
