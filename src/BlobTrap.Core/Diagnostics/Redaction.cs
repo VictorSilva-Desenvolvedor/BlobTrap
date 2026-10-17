@@ -35,6 +35,23 @@ public static class Redaction
         "cookie", "set-cookie", "authorization", "proxy-authorization", "x-auth-token", "x-api-key",
     };
 
+    /// <summary>
+    /// Valor com forma de token: base64/base64url longo. Pega o que o nome não entrega —
+    /// plataformas de curso assinam o HLS com <c>s=</c> e <c>g=</c>, e nome de uma letra não
+    /// casa com marcador nenhum sem levar junto todo parâmetro comum.
+    /// </summary>
+    private static readonly Regex TokenValuePattern = new(
+        @"^[A-Za-z0-9_\-.~%:+/=]{20,}$",
+        RegexOptions.Compiled);
+
+    /// <summary>
+    /// Par <c>nome=valor</c> de query string solto no texto, sem esquema na frente — o yt-dlp
+    /// ecoa só o fim da URL ("playlist.m3u8?e=...&amp;s=..."), que o achador de URLs não vê.
+    /// </summary>
+    private static readonly Regex LooseQueryPairPattern = new(
+        @"(?<=[?&])(?<name>[A-Za-z0-9_\-]+)=(?<value>[^&\s""'<>]+)",
+        RegexOptions.Compiled);
+
     private static readonly Regex UserProfilePattern = new(
         @"[A-Za-z]:\\Users\\[^\\/:*?""<>|\r\n]+",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
@@ -60,6 +77,7 @@ public static class Redaction
         if (string.IsNullOrEmpty(text)) return string.Empty;
 
         var result = ScrubUrlsIn(text);
+        result = ScrubLooseQueryPairs(result);
         result = ScrubHeaderLines(result);
         return ScrubUserPath(result);
     }
@@ -94,7 +112,7 @@ public static class Redaction
 
             var name = pair[..separator];
             builder.Append(name).Append('=')
-                   .Append(IsSecretParameter(name) ? Placeholder : pair[(separator + 1)..]);
+                   .Append(IsSecret(name, pair[(separator + 1)..]) ? Placeholder : pair[(separator + 1)..]);
         }
 
         return builder.ToString();
@@ -120,6 +138,23 @@ public static class Redaction
         return false;
     }
 
+    /// <summary>
+    /// Valor que parece credencial mesmo sem nome que o denuncie: longo, só caracteres de
+    /// base64/URL, misturando maiúscula, minúscula e dígito. Expiração numérica
+    /// (<c>e=1792333176</c>) e texto legível com espaço (<c>%20</c>) ficam de fora — são o que
+    /// o log precisa para diagnosticar, e não abrem sessão nenhuma.
+    /// </summary>
+    public static bool IsSecretValue(string value)
+    {
+        if (!TokenValuePattern.IsMatch(value)) return false;
+        if (value.Contains("%20", StringComparison.Ordinal)) return false;
+
+        return value.Any(char.IsUpper) && value.Any(char.IsLower) && value.Any(char.IsDigit);
+    }
+
+    private static bool IsSecret(string name, string value) =>
+        value != Placeholder && (IsSecretParameter(name) || IsSecretValue(value));
+
     public static bool IsSecretHeader(string name)
     {
         var lower = name.Trim().ToLowerInvariant();
@@ -142,6 +177,16 @@ public static class Redaction
                 : match.Value,
             RegexOptions.None,
             TimeSpan.FromSeconds(1));
+    }
+
+    private static string ScrubLooseQueryPairs(string text)
+    {
+        if (!text.Contains('=', StringComparison.Ordinal)) return text;
+
+        return LooseQueryPairPattern.Replace(text, match =>
+            IsSecret(match.Groups["name"].Value, match.Groups["value"].Value)
+                ? match.Groups["name"].Value + "=" + Placeholder
+                : match.Value);
     }
 
     private static string ScrubHeaderLines(string text)
