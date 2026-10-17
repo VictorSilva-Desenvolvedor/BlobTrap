@@ -214,9 +214,21 @@ public sealed class BrowserFallbackTests : IAsyncLifetime
     {
         var described = MediaHttpClient.DescribeSent(DaPagina with { Cookie = "sessao=segredo" });
 
-        Assert.Contains("Cookie: sim", described);
+        Assert.Contains("com Cookie", described);
         Assert.Contains("Referer", described);
         Assert.DoesNotContain("segredo", described);
+    }
+
+    [Theory]
+    [InlineData("sessao=1", "com Cookie")]
+    [InlineData(null, "sem Cookie")]
+    public void DescribeSent_SobreviveARedactionDoLog(string? cookie, string expected)
+    {
+        // "Cookie: sim" virava "Cookie: [redigido]" no log - e o fato que separa as causas do
+        // 403 sumia na única linha que existe para registrá-lo.
+        var described = MediaHttpClient.DescribeSent(DaPagina with { Cookie = cookie });
+
+        Assert.Contains(expected, BlobTrap.Core.Diagnostics.Redaction.Scrub(described));
     }
 
     /// <summary>Byte i vale i mod 251: um bloco no lugar errado muda o arquivo de forma detectável.</summary>

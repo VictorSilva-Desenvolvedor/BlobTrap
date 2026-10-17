@@ -113,9 +113,14 @@ public sealed class MediaHttpClient : IDisposable
         using var rangedResponse = await _client.SendAsync(ranged, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
             .ConfigureAwait(false);
 
-        if (IsRefusal(rangedResponse.StatusCode) && CanUseBrowser(context)
-            && await ProbeViaBrowserAsync(url, context, cancellationToken).ConfigureAwait(false) is { } viaBrowser)
-            return viaBrowser;
+        if (IsRefusal(rangedResponse.StatusCode) && CanUseBrowser(context))
+        {
+            var firstTime = NoteRefusal(url, rangedResponse.StatusCode, context);
+            var viaBrowser = await ProbeViaBrowserAsync(url, context, cancellationToken).ConfigureAwait(false);
+            NoteBrowserOutcome(url, viaBrowser is not null, firstTime);
+
+            if (viaBrowser is not null) return viaBrowser;
+        }
 
         return MediaProbe.From(rangedResponse);
     }
@@ -124,8 +129,6 @@ public sealed class MediaHttpClient : IDisposable
     {
         var result = await BrowserFallback!.FetchAsync(url, context, "bytes=0-0", cancellationToken).ConfigureAwait(false);
         if (result is not { IsSuccess: true }) return null;
-
-        _browserOnlyHosts.TryAdd(url.Host, 0);
 
         return new MediaProbe
         {
@@ -154,24 +157,38 @@ public sealed class MediaHttpClient : IDisposable
 
         // Refused a URL the browser loaded: ask the browser. The direct response stays the answer
         // when the browser is refused too, so the caller sees the server's own status.
-        var firstTime = _diagnosedHosts.TryAdd(url.Host, 0);
-        if (firstTime)
-            Log.Warn("http", $"{(int)direct.StatusCode} de {url.Host} para o cliente HTTP; enviado: {DescribeSent(context)}. Tentando pelo navegador.");
+        var firstTime = NoteRefusal(url, direct.StatusCode, context);
 
         var viaBrowser = await ViaBrowserAsync(url, context, range, streaming, cancellationToken).ConfigureAwait(false);
-        if (viaBrowser is null)
+        NoteBrowserOutcome(url, viaBrowser is not null, firstTime);
+
+        if (viaBrowser is null) return direct;
+
+        direct.Dispose();
+        return viaBrowser;
+    }
+
+    /// <summary>Logs the refusal once per host. Returns true the first time, so the outcome is logged with it.</summary>
+    private bool NoteRefusal(Uri url, HttpStatusCode status, RequestContext context)
+    {
+        if (!_diagnosedHosts.TryAdd(url.Host, 0)) return false;
+
+        Log.Warn("http", $"{(int)status} de {url.Host} para o cliente HTTP; enviado: {DescribeSent(context)}. Tentando pelo navegador.");
+        return true;
+    }
+
+    private void NoteBrowserOutcome(Uri url, bool succeeded, bool firstTime)
+    {
+        if (!succeeded)
         {
             if (firstTime)
                 Log.Warn("http", $"{url.Host}: o navegador também foi recusado. O link expirou ou a sessão não tem acesso - não é algo que o BlobTrap contorne.");
-            return direct;
+            return;
         }
 
         if (_browserOnlyHosts.TryAdd(url.Host, 0))
             Log.Info("http", $"{url.Host}: o navegador conseguiu. A recusa era do cliente HTTP - token preso à sessão do navegador " +
                              "ou header que não se reproduz -, e os próximos pedidos a este host vão direto pelo navegador.");
-
-        direct.Dispose();
-        return viaBrowser;
     }
 
     private async Task<HttpResponseMessage> SendDirectAsync(
@@ -239,7 +256,9 @@ public sealed class MediaHttpClient : IDisposable
             .Select(h => h.Key)
             .Where(n => !n.Equals("Cookie", StringComparison.OrdinalIgnoreCase));
 
-        return $"{string.Join(", ", names)}; Cookie: {(string.IsNullOrEmpty(context.Cookie) ? "não" : "sim")}";
+        // "com/sem Cookie", never "Cookie: x": the log's redaction would read that as the header
+        // itself and blank exactly the fact this line exists to record.
+        return $"{string.Join(", ", names)}; {(string.IsNullOrEmpty(context.Cookie) ? "sem" : "com")} Cookie";
     }
 
     /// <summary>
