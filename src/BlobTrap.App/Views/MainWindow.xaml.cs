@@ -80,6 +80,8 @@ public partial class MainWindow : Window, IMediaPicker
         _sniffer.Warning += (_, message) => Dispatcher.BeginInvoke(() => _viewModel.StatusText = message);
         await _sniffer.AttachAsync(core);
 
+        _viewModel.UseBrowserFallback(new WebViewFetcher(core, Dispatcher));
+
         _probe = new PageMediaProbe(_viewModel.Registry);
         _probe.BlobSourceDetected += OnBlobSourceDetected;
         await _probe.AttachAsync(core);

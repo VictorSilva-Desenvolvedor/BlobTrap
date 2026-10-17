@@ -133,6 +133,9 @@ public sealed class ProbeRunner : IDisposable
 
         var core = _browser.CoreWebView2;
 
+        // Igual ao app: download recusado ao cliente HTTP tenta pelo navegador.
+        _http.BrowserFallback = new WebViewFetcher(core, _window.Dispatcher);
+
         _sniffer = new CdpSniffer(_registry);
         _sniffer.Warning += (_, message) => Report($"  aviso: {message}");
         await _sniffer.AttachAsync(core);

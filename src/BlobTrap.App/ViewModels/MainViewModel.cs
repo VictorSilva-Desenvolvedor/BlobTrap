@@ -55,6 +55,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         RefreshToolState();
     }
 
+    /// <summary>Lets downloads refused by the server go through the embedded browser instead.</summary>
+    public void UseBrowserFallback(IBrowserFetcher fetcher) => _http.BrowserFallback = fetcher;
+
     /// <summary>
     /// True when this view model holds sample content for the design preview. The window uses
     /// it to skip starting the browser, so the preview needs no network and no WebView2.
