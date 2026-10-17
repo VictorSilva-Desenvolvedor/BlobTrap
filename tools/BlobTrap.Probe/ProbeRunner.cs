@@ -6,11 +6,13 @@ using System.Windows;
 using BlobTrap.App.Browser;
 using BlobTrap.App.Settings;
 using BlobTrap.Core.Diagnostics;
+using BlobTrap.Core.Download;
 using BlobTrap.Core.Models;
 using BlobTrap.Core.Net;
 using BlobTrap.Core.Resolving;
 using BlobTrap.Core.Sniffing;
 using BlobTrap.Core.Tools;
+using BlobTrap.Core.Util;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
 
@@ -49,6 +51,15 @@ public sealed class ProbeOptions
     /// Unknown, ou foi classificado e o registro descartou por filtro.
     /// </summary>
     public string? Trace { get; init; }
+
+    /// <summary>
+    /// Quando definido, depois de detectar baixa de verdade para esta pasta, com o executor do
+    /// app. Detectar e resolver não provam nada sobre o 403 da CDN: ele só aparece no GET da mídia.
+    /// </summary>
+    public string? DownloadDirectory { get; init; }
+
+    /// <summary>Teto por alvo do download. Bytes chegando quando ele acaba contam como sucesso.</summary>
+    public TimeSpan DownloadBudget { get; init; } = TimeSpan.FromSeconds(60);
 }
 
 /// <summary>
@@ -438,6 +449,86 @@ public sealed class ProbeRunner : IDisposable
                 ResolveError: $"não resolveu: {ex.Message}");
         }
     }
+
+    /// <summary>
+    /// Baixa o que <see cref="RunAsync"/> acabou de detectar, candidato por candidato, até um
+    /// funcionar. Chamar logo depois dele: a lista é a da página atual.
+    /// </summary>
+    public async Task<DownloadResult> DownloadAsync(DetectionTarget target)
+    {
+        var directory = _options.DownloadDirectory
+            ?? throw new InvalidOperationException("DownloadDirectory não definido.");
+
+        var attempts = new List<DownloadAttempt>();
+        var executor = new DownloadExecutor(_http, _resolver);
+
+        var candidates = _registry.Snapshot()
+            .Where(c => c.Kind.IsDownloadable())
+            .Take(_options.MaxResolve)
+            .ToList();
+
+        foreach (var candidate in candidates)
+        {
+            var attempt = await DownloadOneAsync(executor, candidate, directory);
+            attempts.Add(attempt);
+            Report($"  download: {attempt.Outcome} via {attempt.ResolvedBy ?? "-"} ({attempt.Bytes} bytes)"
+                   + (attempt.Error is null ? string.Empty : $" - {Redaction.Scrub(attempt.Error).ReplaceLineEndings(" ")}"));
+
+            if (attempt.Outcome is DownloadOutcome.Baixou or DownloadOutcome.Baixando) break;
+        }
+
+        return new DownloadResult(target, attempts);
+    }
+
+    private async Task<DownloadAttempt> DownloadOneAsync(DownloadExecutor executor, MediaCandidate candidate, string directory)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        long bytes = 0;
+        MediaSource? source = null;
+        string? quality = null;
+
+        using var budget = new CancellationTokenSource(_options.DownloadBudget);
+
+        DownloadAttempt Result(DownloadOutcome outcome, string? error) => new(
+            candidate.Kind, candidate.Url, source?.ResolvedBy, quality, outcome, bytes, stopwatch.Elapsed, error);
+
+        try
+        {
+            source = await _resolver.ResolveAsync(candidate, budget.Token);
+
+            var video = source.BestVideo ?? source.Variants.FirstOrDefault();
+            if (video is null) return Result(DownloadOutcome.Falhou, "resolveu sem nenhuma variante");
+            quality = video.Label;
+
+            var audio = video.Track == TrackKind.VideoOnly ? source.BestAudioFor(video) : null;
+            var plan = new DownloadPlan
+            {
+                Source = source,
+                Video = video,
+                Audio = audio,
+                OutputPath = Path.Combine(directory, $"{Naming.StableId(candidate.Url.AbsoluteUri)}.mp4"),
+            };
+
+            var progress = new Progress<DownloadProgress>(p => bytes = Math.Max(bytes, p.BytesReceived));
+            await executor.ExecuteAsync(new DownloadJob(plan), progress, budget.Token);
+
+            bytes = Math.Max(bytes, FileSize(plan.OutputPath));
+            return Result(DownloadOutcome.Baixou, null);
+        }
+        catch (OperationCanceledException) when (budget.IsCancellationRequested)
+        {
+            return bytes > 0
+                ? Result(DownloadOutcome.Baixando, null)
+                : Result(DownloadOutcome.Falhou, $"nenhum byte em {_options.DownloadBudget.TotalSeconds:0}s");
+        }
+        catch (Exception ex)
+        {
+            // A mensagem é exatamente o que o app mostraria na fila, e é ela que se veio medir.
+            return Result(DownloadOutcome.Falhou, ex.Message);
+        }
+    }
+
+    private static long FileSize(string path) => File.Exists(path) ? new FileInfo(path).Length : 0;
 
     /// <summary>O que a página relata sobre os próprios players, depois da tentativa de play.</summary>
     private sealed record PlaybackState(int Elements, double Position, bool UsesBlob)
