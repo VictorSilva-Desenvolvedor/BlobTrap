@@ -15,6 +15,8 @@ public partial class MainWindow : Window, IMediaPicker
     private readonly MainViewModel _viewModel;
     private CdpSniffer? _sniffer;
     private PageMediaProbe? _probe;
+    private IReadOnlyList<LoadedExtension> _extensions = [];
+    private ExtensionsWindow? _extensionsWindow;
 
     public MainWindow()
         : this(null)
@@ -56,7 +58,8 @@ public partial class MainWindow : Window, IMediaPicker
             var userDataFolder = Path.Combine(ToolLocator.AppDataDirectory, "webview");
             Directory.CreateDirectory(userDataFolder);
 
-            var environment = await CoreWebView2Environment.CreateAsync(null, userDataFolder);
+            var options = new CoreWebView2EnvironmentOptions { AreBrowserExtensionsEnabled = true };
+            var environment = await CoreWebView2Environment.CreateAsync(null, userDataFolder, options);
             await Browser.EnsureCoreWebView2Async(environment);
         }
         catch (Exception ex)
@@ -70,6 +73,8 @@ public partial class MainWindow : Window, IMediaPicker
         }
 
         var core = Browser.CoreWebView2;
+
+        _extensions = await BrowserExtensions.LoadAllAsync(core.Profile);
 
         _sniffer = new CdpSniffer(_viewModel.Registry);
         _sniffer.Warning += (_, message) => Dispatcher.BeginInvoke(() => _viewModel.StatusText = message);
@@ -180,6 +185,32 @@ public partial class MainWindow : Window, IMediaPicker
         var window = new ToolsWindow(_viewModel) { Owner = this };
         window.ShowDialog();
         _viewModel.RefreshToolState();
+    }
+
+    private void OnExtensionsClick(object sender, RoutedEventArgs e)
+    {
+        if (Browser.CoreWebView2 is null) return;
+
+        // Modeless, so the page can keep playing and the extension's list updates while it is open.
+        if (_extensionsWindow is { IsLoaded: true })
+        {
+            _extensionsWindow.Activate();
+            return;
+        }
+
+        _extensionsWindow = new ExtensionsWindow(Browser.CoreWebView2.Environment, _extensions, ReloadExtensionsAsync)
+        {
+            Owner = this,
+        };
+        _extensionsWindow.Show();
+    }
+
+    private async Task<IReadOnlyList<LoadedExtension>> ReloadExtensionsAsync()
+    {
+        if (Browser.CoreWebView2 is not null)
+            _extensions = await BrowserExtensions.LoadAllAsync(Browser.CoreWebView2.Profile);
+
+        return _extensions;
     }
 
     public Task<DownloadPlan?> PickAsync(MediaSource source, string downloadDirectory)
