@@ -91,3 +91,18 @@ encaminha native messaging de extensão.
 
 **Hipótese:** é provável que não funcione, e o próprio BlobTrap já cobre HLS/DASH. Testar com um
 manifesto HLS antes de prometer esse caminho ao usuário.
+
+---
+
+## Anúncio do Google (2mdn.net) conta como vídeo da página
+
+**Arquivo:** `src/BlobTrap.Core/Sniffing/MediaClassifier.cs` / `MediaRegistry.cs`; o veredito sai em `tools/BlobTrap.Probe/DetectionCheck.cs`
+
+**Sintoma:** em 2026-10-17 o Probe deu `[ok]` para `https://www.twitch.tv/directory` com dois
+"Arquivo de vídeo" — ambos `*.2mdn.net/videoplayback/.../source/web_video_ads/...`, o pré-roll
+do Google Ads. A página não tinha vídeo próprio tocando. O usuário vê o anúncio na lista como se
+fosse o conteúdo, e o Probe dá verde pelo motivo errado.
+
+**Hipótese:** marcar como anúncio (e esconder por padrão, como os arquivos pequenos) mídia de
+hosts de ad-serving conhecidos (`2mdn.net`, `doubleclick.net`, `imasdk.googleapis.com`) ou com
+`source/web_video_ads` no caminho. Decidir se esconde ou só rebaixa na lista é do dono do projeto.
