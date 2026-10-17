@@ -16,6 +16,7 @@ public partial class MainWindow : Window, IMediaPicker
     private CdpSniffer? _sniffer;
     private PageMediaProbe? _probe;
     private IReadOnlyList<LoadedExtension> _extensions = [];
+    private ExtensionsWindow? _extensionsWindow;
 
     public MainWindow()
         : this(null)
@@ -184,6 +185,21 @@ public partial class MainWindow : Window, IMediaPicker
         var window = new ToolsWindow(_viewModel) { Owner = this };
         window.ShowDialog();
         _viewModel.RefreshToolState();
+    }
+
+    private void OnExtensionsClick(object sender, RoutedEventArgs e)
+    {
+        if (Browser.CoreWebView2 is null) return;
+
+        // Modeless, so the page can keep playing and the extension's list updates while it is open.
+        if (_extensionsWindow is { IsLoaded: true })
+        {
+            _extensionsWindow.Activate();
+            return;
+        }
+
+        _extensionsWindow = new ExtensionsWindow(Browser.CoreWebView2.Environment, _extensions) { Owner = this };
+        _extensionsWindow.Show();
     }
 
     public Task<DownloadPlan?> PickAsync(MediaSource source, string downloadDirectory)

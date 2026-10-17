@@ -1,0 +1,30 @@
+<Window x:Class="BlobTrap.App.Views.ExtensionsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="Extensões" Height="640" Width="480"
+        MinHeight="400" MinWidth="380"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        UseLayoutRounding="True">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <ComboBox Grid.Row="0" x:Name="ExtensionCombo" DisplayMemberPath="Name" Margin="12,12,12,0"
+                  SelectionChanged="OnExtensionSelected" Visibility="Collapsed"/>
+
+        <wv2:WebView2 Grid.Row="1" x:Name="Popup" Margin="0,12,0,0"/>
+
+        <StackPanel Grid.Row="1" x:Name="EmptyState" VerticalAlignment="Center" Margin="32"
+                    Visibility="Collapsed">
+            <TextBlock Text="&#xEA86;" Style="{StaticResource Glyph}" FontSize="32"
+                       HorizontalAlignment="Center" Foreground="{DynamicResource TextSecondary}"/>
+            <TextBlock x:Name="EmptyText" Style="{StaticResource CaptionMuted}" Margin="0,12,0,0"
+                       TextWrapping="Wrap" TextAlignment="Center"/>
+        </StackPanel>
+    </Grid>
+</Window>
