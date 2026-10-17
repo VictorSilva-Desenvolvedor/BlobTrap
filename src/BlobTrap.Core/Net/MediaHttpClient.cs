@@ -1,6 +1,9 @@
+using System.Collections.Concurrent;
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
+using BlobTrap.Core.Diagnostics;
 
 namespace BlobTrap.Core.Net;
 
@@ -35,6 +38,18 @@ public sealed class MediaHttpClient : IDisposable
 
     public int MaxRetries { get; set; } = 4;
 
+    /// <summary>
+    /// Fetches through the embedded browser when the server refuses this client (401/403) a
+    /// URL captured from a page. Null disables the fallback.
+    /// </summary>
+    public IBrowserFetcher? BrowserFallback { get; set; }
+
+    /// <summary>Hosts that refused this client but served the browser. Later requests skip the doomed direct try.</summary>
+    private readonly ConcurrentDictionary<string, byte> _browserOnlyHosts = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Hosts already diagnosed in the log, so an HLS of 900 segments logs the cause once, not 900 times.</summary>
+    private readonly ConcurrentDictionary<string, byte> _diagnosedHosts = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Fetches a text resource (manifest, playlist, subtitle track).</summary>
     public async Task<string> GetStringAsync(Uri url, RequestContext context, CancellationToken cancellationToken)
     {
@@ -67,6 +82,10 @@ public sealed class MediaHttpClient : IDisposable
     /// </summary>
     public async Task<MediaProbe> ProbeAsync(Uri url, RequestContext context, CancellationToken cancellationToken)
     {
+        if (CanUseBrowser(context) && _browserOnlyHosts.ContainsKey(url.Host)
+            && await ProbeViaBrowserAsync(url, context, cancellationToken).ConfigureAwait(false) is { } known)
+            return known;
+
         try
         {
             using var head = new HttpRequestMessage(HttpMethod.Head, url);
@@ -94,10 +113,68 @@ public sealed class MediaHttpClient : IDisposable
         using var rangedResponse = await _client.SendAsync(ranged, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
             .ConfigureAwait(false);
 
+        if (IsRefusal(rangedResponse.StatusCode) && CanUseBrowser(context)
+            && await ProbeViaBrowserAsync(url, context, cancellationToken).ConfigureAwait(false) is { } viaBrowser)
+            return viaBrowser;
+
         return MediaProbe.From(rangedResponse);
     }
 
+    private async Task<MediaProbe?> ProbeViaBrowserAsync(Uri url, RequestContext context, CancellationToken cancellationToken)
+    {
+        var result = await BrowserFallback!.FetchAsync(url, context, "bytes=0-0", cancellationToken).ConfigureAwait(false);
+        if (result is not { IsSuccess: true }) return null;
+
+        _browserOnlyHosts.TryAdd(url.Host, 0);
+
+        return new MediaProbe
+        {
+            ContentLength = TotalFromContentRange(result.ContentRange) ?? (result.Status == 200 ? result.Body.Length : null),
+            ContentType = result.ContentType,
+            SupportsRanges = result.Status == (int)HttpStatusCode.PartialContent,
+            StatusCode = (HttpStatusCode)result.Status,
+        };
+    }
+
     private async Task<HttpResponseMessage> SendWithRetryAsync(
+        Uri url,
+        RequestContext context,
+        string? range,
+        HttpCompletionOption completionOption,
+        CancellationToken cancellationToken)
+    {
+        var streaming = completionOption == HttpCompletionOption.ResponseHeadersRead;
+
+        if (CanUseBrowser(context) && _browserOnlyHosts.ContainsKey(url.Host)
+            && await ViaBrowserAsync(url, context, range, streaming, cancellationToken).ConfigureAwait(false) is { } known)
+            return known;
+
+        var direct = await SendDirectAsync(url, context, range, completionOption, cancellationToken).ConfigureAwait(false);
+        if (!IsRefusal(direct.StatusCode) || !CanUseBrowser(context)) return direct;
+
+        // Refused a URL the browser loaded: ask the browser. The direct response stays the answer
+        // when the browser is refused too, so the caller sees the server's own status.
+        var firstTime = _diagnosedHosts.TryAdd(url.Host, 0);
+        if (firstTime)
+            Log.Warn("http", $"{(int)direct.StatusCode} de {url.Host} para o cliente HTTP; enviado: {DescribeSent(context)}. Tentando pelo navegador.");
+
+        var viaBrowser = await ViaBrowserAsync(url, context, range, streaming, cancellationToken).ConfigureAwait(false);
+        if (viaBrowser is null)
+        {
+            if (firstTime)
+                Log.Warn("http", $"{url.Host}: o navegador também foi recusado. O link expirou ou a sessão não tem acesso - não é algo que o BlobTrap contorne.");
+            return direct;
+        }
+
+        if (_browserOnlyHosts.TryAdd(url.Host, 0))
+            Log.Info("http", $"{url.Host}: o navegador conseguiu. A recusa era do cliente HTTP - token preso à sessão do navegador " +
+                             "ou header que não se reproduz -, e os próximos pedidos a este host vão direto pelo navegador.");
+
+        direct.Dispose();
+        return viaBrowser;
+    }
+
+    private async Task<HttpResponseMessage> SendDirectAsync(
         Uri url,
         RequestContext context,
         string? range,
@@ -142,6 +219,110 @@ public sealed class MediaHttpClient : IDisposable
         }
 
         throw new HttpRequestException($"Falha ao buscar {url} apos {MaxRetries + 1} tentativas.", lastError);
+    }
+
+    /// <summary>
+    /// Only a URL captured from a page goes to the browser: the Referer is what says the
+    /// browser loaded it. A tool download (ffmpeg, yt-dlp from GitHub) carries none, and a 403
+    /// there is a real answer, not a session problem.
+    /// </summary>
+    private bool CanUseBrowser(RequestContext context) =>
+        BrowserFallback is not null && !string.IsNullOrWhiteSpace(context.Referer);
+
+    private static bool IsRefusal(HttpStatusCode status) =>
+        status is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized;
+
+    /// <summary>Header names only, and whether a session went along - what tells the causes of a 403 apart.</summary>
+    internal static string DescribeSent(RequestContext context)
+    {
+        var names = context.EnumerateHeaders()
+            .Select(h => h.Key)
+            .Where(n => !n.Equals("Cookie", StringComparison.OrdinalIgnoreCase));
+
+        return $"{string.Join(", ", names)}; Cookie: {(string.IsNullOrEmpty(context.Cookie) ? "não" : "sim")}";
+    }
+
+    /// <summary>
+    /// Builds the response from the browser's fetch. Whole-body reads (manifests, segments,
+    /// keys) take one fetch; streams go through <see cref="BrowserRangeStream"/> in blocks.
+    /// Null when the browser was refused too or could not ask.
+    /// </summary>
+    private async Task<HttpResponseMessage?> ViaBrowserAsync(
+        Uri url, RequestContext context, string? range, bool streaming, CancellationToken cancellationToken)
+    {
+        var fetcher = BrowserFallback!;
+
+        if (!streaming)
+        {
+            var whole = await fetcher.FetchAsync(url, context, range, cancellationToken).ConfigureAwait(false);
+            return whole is { IsSuccess: true } ? ToResponse(whole) : null;
+        }
+
+        var (start, end) = ParseRange(range);
+        var firstEnd = Math.Min(end ?? long.MaxValue, start + BrowserRangeStream.BlockSize - 1);
+
+        var first = await fetcher.FetchAsync(url, context, $"bytes={start}-{firstEnd}", cancellationToken).ConfigureAwait(false);
+        if (first is not { IsSuccess: true }) return null;
+
+        // The server ignored the range and sent everything: that is the whole answer.
+        if (first.Status != (int)HttpStatusCode.PartialContent) return ToResponse(first);
+
+        var total = TotalFromContentRange(first.ContentRange);
+        var last = end ?? (total is { } t ? t - 1 : null);
+
+        // A first block shorter than asked is the whole thing.
+        if (first.Body.Length < firstEnd - start + 1 && (last is null || start + first.Body.Length > last))
+            return ToResponse(first);
+
+        // No total: the CDN did not expose Content-Range to the page through CORS. The stream
+        // then reads until the file runs out, and the length goes unannounced.
+        var stream = new BrowserRangeStream(
+            fetcher, url, context, first.Body, start + first.Body.Length, last ?? BrowserRangeStream.UnknownEnd);
+        var response = new HttpResponseMessage(range is null ? HttpStatusCode.OK : HttpStatusCode.PartialContent)
+        {
+            Content = new StreamContent(stream),
+        };
+
+        if (last is not null) response.Content.Headers.ContentLength = last.Value - start + 1;
+        if (first.ContentType is { } type && MediaTypeHeaderValue.TryParse(type, out var parsed))
+            response.Content.Headers.ContentType = parsed;
+
+        return response;
+    }
+
+    private static HttpResponseMessage ToResponse(BrowserFetchResult result)
+    {
+        var response = new HttpResponseMessage((HttpStatusCode)result.Status) { Content = new ByteArrayContent(result.Body) };
+
+        if (result.ContentType is { } type && MediaTypeHeaderValue.TryParse(type, out var parsed))
+            response.Content.Headers.ContentType = parsed;
+        if (result.ContentRange is { } range && ContentRangeHeaderValue.TryParse(range, out var contentRange))
+            response.Content.Headers.ContentRange = contentRange;
+
+        return response;
+    }
+
+    /// <summary>"bytes=a-b" or "bytes=a-" into offsets; anything else means the whole resource.</summary>
+    internal static (long Start, long? End) ParseRange(string? range)
+    {
+        if (range is null || !range.StartsWith("bytes=", StringComparison.OrdinalIgnoreCase)) return (0, null);
+
+        var parts = range[6..].Split('-', 2);
+        if (!long.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var start)) return (0, null);
+
+        long? end = parts.Length > 1 && long.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var e) ? e : null;
+        return (start, end);
+    }
+
+    /// <summary>The total from "bytes a-b/total"; null for "bytes a-b/*" or a missing header.</summary>
+    internal static long? TotalFromContentRange(string? contentRange)
+    {
+        if (contentRange is null) return null;
+
+        var slash = contentRange.LastIndexOf('/');
+        return slash >= 0 && long.TryParse(contentRange[(slash + 1)..], NumberStyles.Integer, CultureInfo.InvariantCulture, out var total)
+            ? total
+            : null;
     }
 
     private static bool IsRetryable(HttpStatusCode status) =>
