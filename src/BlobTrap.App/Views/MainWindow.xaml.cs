@@ -15,6 +15,7 @@ public partial class MainWindow : Window, IMediaPicker
     private readonly MainViewModel _viewModel;
     private CdpSniffer? _sniffer;
     private PageMediaProbe? _probe;
+    private IReadOnlyList<LoadedExtension> _extensions = [];
 
     public MainWindow()
         : this(null)
@@ -56,7 +57,8 @@ public partial class MainWindow : Window, IMediaPicker
             var userDataFolder = Path.Combine(ToolLocator.AppDataDirectory, "webview");
             Directory.CreateDirectory(userDataFolder);
 
-            var environment = await CoreWebView2Environment.CreateAsync(null, userDataFolder);
+            var options = new CoreWebView2EnvironmentOptions { AreBrowserExtensionsEnabled = true };
+            var environment = await CoreWebView2Environment.CreateAsync(null, userDataFolder, options);
             await Browser.EnsureCoreWebView2Async(environment);
         }
         catch (Exception ex)
@@ -70,6 +72,8 @@ public partial class MainWindow : Window, IMediaPicker
         }
 
         var core = Browser.CoreWebView2;
+
+        _extensions = await BrowserExtensions.LoadAllAsync(core.Profile);
 
         _sniffer = new CdpSniffer(_viewModel.Registry);
         _sniffer.Warning += (_, message) => Dispatcher.BeginInvoke(() => _viewModel.StatusText = message);
