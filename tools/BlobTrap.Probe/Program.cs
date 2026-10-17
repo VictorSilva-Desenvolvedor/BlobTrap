@@ -81,6 +81,8 @@ public static class Program
             MaxResolve = (int)Number(args, "--max-resolve", 3),
             ShowWindow = !args.Contains("--hidden"),
             Trace = Value(args, "--trace"),
+            DownloadDirectory = Value(args, "--download") is { } pasta ? Path.GetFullPath(pasta) : null,
+            DownloadBudget = TimeSpan.FromSeconds(Number(args, "--download-budget", 60)),
         };
 
         // O log da ferramenta fica junto do relatório, não no log do usuário: quem roda isto
@@ -109,7 +111,23 @@ public static class Program
         await runner.StartAsync();
 
         var results = new List<DetectionResult>();
-        foreach (var target in targets) results.Add(await runner.RunAsync(target));
+        var downloads = new List<DownloadResult>();
+
+        foreach (var target in targets)
+        {
+            results.Add(await runner.RunAsync(target));
+            if (options.DownloadDirectory is not null) downloads.Add(await runner.DownloadAsync(target));
+        }
+
+        if (options.DownloadDirectory is not null)
+        {
+            var downloadReport = Path.ChangeExtension(outputPath, ".download.md");
+            await File.WriteAllTextAsync(downloadReport,
+                DownloadCheck.Render(downloads, AppVersion.Current, DateTimeOffset.Now), Encoding.UTF8);
+
+            var baixaram = downloads.Count(d => d.Outcome is DownloadOutcome.Baixou or DownloadOutcome.Baixando);
+            Console.WriteLine($"\n{baixaram}/{downloads.Count} baixaram. Relatório: {Path.GetFullPath(downloadReport)}");
+        }
 
         var report = DetectionCheck.Render(results, AppVersion.Current, DateTimeOffset.Now);
         await File.WriteAllTextAsync(outputPath, report, Encoding.UTF8);
@@ -149,6 +167,10 @@ public static class Program
           --quiet <segundos>    silêncio do sniffer que encerra a coleta (padrão: 6)
           --max-resolve <n>     candidatos resolvidos por alvo (padrão: 3)
           --hidden              tira a janela do caminho (o navegador continua rodando)
+          --download <pasta>    depois de detectar, baixa de verdade para a pasta, com o
+                                executor do app, e grava <out>.download.md
+          --download-budget <s> teto do download por alvo (padrão: 60); bytes chegando
+                                quando ele acaba contam como sucesso
           --trace <texto>       imprime toda resposta cuja URL contenha o texto, com o que o
                                 classificador concluiu sobre ela
 
