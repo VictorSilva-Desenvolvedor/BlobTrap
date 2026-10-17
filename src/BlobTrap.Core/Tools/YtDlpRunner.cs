@@ -333,11 +333,18 @@ public sealed class YtDlpRunner
         {
             if (key.Equals("User-Agent", StringComparison.OrdinalIgnoreCase)) continue;
             if (key.Equals("Referer", StringComparison.OrdinalIgnoreCase)) continue;
+            if (!IsForYtDlp(key)) continue;
 
             arguments.Add("--add-header");
             arguments.Add($"{key}:{value}");
         }
     }
+
+    /// <summary>Origin, Cookie and the authenticating headers; see <see cref="RequestContext.IsAuthenticationHeader"/>.</summary>
+    private static bool IsForYtDlp(string key) =>
+        key.Equals("Origin", StringComparison.OrdinalIgnoreCase)
+        || key.Equals("Cookie", StringComparison.OrdinalIgnoreCase)
+        || RequestContext.IsAuthenticationHeader(key);
 
     public async Task<string?> GetVersionAsync(CancellationToken cancellationToken)
     {
