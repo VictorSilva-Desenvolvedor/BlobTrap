@@ -41,6 +41,17 @@ public sealed class MediaResolver
 
     public async Task<MediaSource> ResolveAsync(MediaCandidate candidate, CancellationToken cancellationToken)
     {
+        var source = await ResolveCoreAsync(candidate, cancellationToken).ConfigureAwait(false);
+
+        // O que a origem OFERECIA, registrado antes de o usuario escolher: e' a referencia para
+        // conferir depois se a escolha foi a melhor qualidade e se havia faixa de audio.
+        Log.Info("resolver", DownloadAudit.DescribeSource(source));
+
+        return source;
+    }
+
+    private async Task<MediaSource> ResolveCoreAsync(MediaCandidate candidate, CancellationToken cancellationToken)
+    {
         // Ja sabemos que este candidato pertence a um pacote protegido: o manifesto ao lado
         // dele se provou DRM. Sem esta recusa, ResolveProgressiveAsync devolvia uma fonte
         // normal e o arquivo cifrado voltava a ser oferecido como download livre - a marca

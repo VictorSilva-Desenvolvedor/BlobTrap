@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using BlobTrap.Core.Diagnostics;
 using BlobTrap.Core.Models;
 using BlobTrap.Core.Resolving;
+using BlobTrap.Core.Tools;
 
 namespace BlobTrap.Core.Download;
 
@@ -102,6 +103,7 @@ public sealed class DownloadManager : IDisposable
         }
 
         Log.Info("download", $"[{job.Id}] tentativa {job.Attempt}: {job.Plan.Video.Label} -> {job.OutputPath}");
+        LogPlan(job);
         Transition(job, DownloadState.Preparing);
 
         // Progresso aplicado na propria thread que reporta, e nao por Progress<T>.
@@ -159,6 +161,17 @@ public sealed class DownloadManager : IDisposable
             // registro de POR QUE a CDN recusou, e sem ele o relato de bug vira adivinhacao.
             Log.Error("download", $"[{job.Id}] falhou", ex);
             Transition(job, DownloadState.Failed);
+        }
+    }
+
+    private static void LogPlan(DownloadJob job)
+    {
+        foreach (var line in DownloadAudit.DescribePlan(job.Plan, ToolLocator.IsAvailable(ExternalTool.Ffmpeg)))
+        {
+            var message = $"[{job.Id}] {line.Message}";
+
+            if (line.Level == LogLevel.Warn) Log.Warn("download", message);
+            else Log.Info("download", message);
         }
     }
 
