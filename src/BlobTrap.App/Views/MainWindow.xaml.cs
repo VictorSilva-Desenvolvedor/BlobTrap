@@ -28,6 +28,7 @@ public partial class MainWindow : Window, IMediaPicker
     public MainWindow(MainViewModel? viewModel)
     {
         InitializeComponent();
+        WindowFit.ToWorkArea(this);
 
         WindowEffects.Attach(this);
 
