@@ -34,6 +34,7 @@ public partial class QualityWindow : Window
     public QualityWindow(MediaSource source, MainViewModel viewModel)
     {
         InitializeComponent();
+        WindowFit.ToWorkArea(this);
 
         // Windows 11 gives dialogs the transient acrylic material rather than Mica.
         WindowEffects.Attach(this, Backdrop.Acrylic);

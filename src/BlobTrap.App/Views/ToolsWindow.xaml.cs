@@ -18,6 +18,7 @@ public partial class ToolsWindow : Window
     public ToolsWindow(MainViewModel viewModel)
     {
         InitializeComponent();
+        WindowFit.ToWorkArea(this);
 
         WindowEffects.Attach(this, Backdrop.Acrylic);
 
