@@ -45,19 +45,25 @@ captura.
 
 ## Interface
 
-![Mídias detectadas](docs/tela-midias.png)
+Os prints são do app real, num vídeo do YouTube: *Big Buck Bunny*, curta da Blender
+Foundation sob licença Creative Commons.
 
-Cada item traz o tipo, o tamanho quando o servidor informa e o host de onde veio — o
-bastante para escolher sem abrir o console do navegador.
+![Mídias detectadas no YouTube](docs/tela-midias.png)
 
-![Fila de downloads](docs/tela-downloads.png)
+O YouTube entrega a mídia por SABR/UMP, um protocolo que não tem manifesto para baixar. O
+BlobTrap reconhece isso e lista a **página**: o download passa pelo yt-dlp. Num site com HLS,
+DASH ou arquivo direto, cada mídia aparece como item próprio, com tipo, tamanho e host.
 
-A fila mostra progresso, velocidade e quanto falta, e no fim o ffmpeg juntando as faixas.
-As duas últimas linhas falharam: uma oferece **Tentar de novo**, a de DRM não.
-
-| Escolher qualidade | Ferramentas |
+| Escolher qualidade | Fila de downloads |
 | --- | --- |
-| ![Diálogo de qualidade](docs/tela-qualidade.png) | ![Ferramentas e preferências](docs/tela-ferramentas.png) |
+| ![Diálogo de qualidade](docs/tela-qualidade.png) | ![Fila de downloads](docs/tela-downloads.png) |
+
+O diálogo lista as faixas que a origem oferece. Neste vídeo são 48, de 4K60 em VP9/AV1 até
+144p, com o tamanho estimado de cada uma e a faixa de áudio que será juntada ao vídeo. A fila
+mostra progresso, velocidade e quanto falta. O arquivo final deste print saiu em 1080p H.264
+com áudio AAC.
+
+![Ferramentas e preferências](docs/tela-ferramentas.png)
 
 Segue o Windows 11 em tempo de execução. Lê o tema claro/escuro e a cor de destaque direto do
 registro e troca a paleta quando você muda nas Configurações, sem reiniciar o app. Usa a rampa
