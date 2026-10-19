@@ -20,8 +20,16 @@ captura.
   recodificar).
 - **yt-dlp como fallback** para sites cuja mídia nunca aparece como manifesto simples, e para o
   botão "Baixar esta página".
-- **Replay de contexto HTTP**: cookies, `Referer`, `Origin`, `User-Agent` e `Authorization`
-  capturados do request original são reenviados, senão a CDN devolve 403.
+- **Replay de contexto HTTP**: todo header que o navegador mandou no request original —
+  `Cookie`, `Referer`, `Origin`, `User-Agent`, `Authorization` e qualquer header próprio do
+  player — é reenviado no download. Ficam de fora só os que pertencem ao cliente HTTP
+  (framing, compressão, `Range`, condicionais e cache). O `Cookie` que o CDP entrega atrasado,
+  depois da resposta, também entra no candidato.
+- **Fallback pelo navegador**: quando o servidor recusa o BlobTrap com 401/403 mas serve a
+  página, o download passa a ser feito pelo próprio WebView2 — um `fetch()` num mundo isolado
+  do frame que tocou a mídia, com a mesma sessão e a mesma pilha de rede, como uma extensão
+  faria. Arquivo grande vem em blocos de 8 MB; um bloco que falha derruba o download em vez de
+  truncar o arquivo calado. Depois do primeiro 403, o host vai direto pelo navegador.
 - **Faixas separadas**: quando o vídeo vem sem áudio (o normal em DASH e em HLS com
   `EXT-X-MEDIA`), o BlobTrap baixa as duas e junta com ffmpeg.
 - **Retomar de onde parou**: cancelou, caiu a rede ou faltou luz no meio de um filme de 4 GB?
@@ -30,6 +38,10 @@ captura.
 - **Tentar de novo**: um 403 tardio não custa renavegar e reescolher qualidade — o botão
   reenfileira com a mesma escolha. Falha por DRM não oferece o botão, porque repetir daria
   exatamente o mesmo erro.
+- **Extensões do Chrome**: pastas descompactadas em `%LOCALAPPDATA%\BlobTrap\extensions`
+  são carregadas no perfil do navegador ao abrir. O botão **Extensões** abre a página do botão
+  da extensão ligada à aba atual e, com a lista vazia, oferece instalar o Video DownloadHelper
+  direto da Chrome Web Store.
 
 ## Interface
 
@@ -119,6 +131,22 @@ justamente para não divergir.
 Se nada aparecer, use **Baixar esta página** — passa a URL para o yt-dlp, que conhece as regras
 de extração de mais de mil sites.
 
+## Se não funcionar
+
+| Sintoma | O que fazer |
+| --- | --- |
+| Nada aparece no painel | Dê play — muitos players só buscam o manifesto no play. Se ainda assim nada vier, **Baixar esta página** (yt-dlp). |
+| Item aparece mas o download falha com 403 | Normalmente o fallback pelo navegador resolve sozinho. Se não, o log diz quais headers foram enviados e se havia sessão (veja [Diagnóstico](#diagnóstico)). |
+| Recusado por DRM | Esperado. Ver [O que ele não faz](#o-que-ele-não-faz). |
+| Arquivo `.ts` em vez de `.mp4`, ou vídeo sem som | ffmpeg não instalado — abra **Ferramentas**. |
+
+## Contribuir
+
+As regras do projeto estão em [CLAUDE.md](CLAUDE.md): branch e PR para tudo (nada direto na
+`main`), commits atômicos com escopo (`feat(download):`, `fix(redaction):`), CI verde antes do
+merge, e commits só com o autor humano. Problema achado fora do tópico vai para o
+[BACKLOG.md](BACKLOG.md).
+
 ## Estrutura
 
 ```
@@ -132,12 +160,12 @@ src/BlobTrap.Core/          # tudo que não é UI
   Tools/                    # ffmpeg, yt-dlp, instalador com checksum
   Net/                      # HttpClient com retry e replay de contexto
 src/BlobTrap.App/           # WPF
-  Browser/                  # sniffer CDP e sonda de DOM
+  Browser/                  # sniffer CDP, sonda de DOM, fetch pelo WebView2, extensões
   Theming/                  # tema do sistema, paleta de acento, efeitos de janela
   ViewModels/  Views/
 tools/BlobTrap.Probe/       # autoteste de detecção contra páginas reais
 installer/                  # script Inno Setup e build
-tests/BlobTrap.Tests/       # 349 testes
+tests/BlobTrap.Tests/       # xUnit
 ```
 
 ## Testes
@@ -161,6 +189,11 @@ Cobrem o que quebra silenciosamente:
 - **Redaction**: com os formatos que aparecem de verdade — `hdnts` da Akamai,
   `Policy`/`Signature` do CloudFront, `X-Amz-*` do S3, cabeçalho `Cookie`, caminho do perfil.
   O log é o arquivo que a pessoa anexa num relato de bug; ele não pode conter a sessão dela.
+  Token opaco (`s=`, `g=` de uma plataforma de curso) é redigido pelo valor, não só pelo nome,
+  e pares `?nome=valor` soltos — o yt-dlp ecoa a URL sem `https://` — também.
+- **Repasse de headers**: o que vai para o download e o que fica, e o `Cookie` que chega
+  depois da resposta.
+- **Pacote CRX**: cabeçalho CRX2/CRX3, incluindo download truncado.
 - **Retomada de segmentado**: um servidor HTTP local de verdade derruba o download no meio e
   o teste prova duas coisas — que a retomada produz bytes idênticos aos de baixar de uma vez,
   e que os segmentos já gravados não voltam para a rede. Sem essa segunda parte o teste
@@ -171,11 +204,30 @@ Cobrem o que quebra silenciosamente:
 A suíte roda sem rede, sem ffmpeg e sem yt-dlp, exceto o teste de retomada, que sobe seu
 próprio servidor em `127.0.0.1`.
 
+## Autoteste contra páginas reais
+
+A suíte de testes não toca a internet. Para saber se a detecção ainda funciona nos sites de
+verdade, o `BlobTrap.Probe` abre cada alvo no mesmo navegador do app, dá play, e relata o que
+o sniffer achou e o que o resolvedor conseguiu montar:
+
+```powershell
+dotnet run --project tools\BlobTrap.Probe -- --out relatorio.md
+dotnet run --project tools\BlobTrap.Probe -- --only youtube --trace googlevideo
+dotnet run --project tools\BlobTrap.Probe -- --download C:\temp\probe   # baixa de verdade
+```
+
+Detectar não prova nada sobre o 403 da CDN, que só aparece no GET da mídia; por isso existe
+`--download`, que baixa cada alvo com o executor do app (inclusive o fallback pelo navegador)
+e grava `<out>.download.md`. `--help` lista todas as opções. Sai com 0 se todos passaram, 1 se
+algum falhou e 2 se a ferramenta não rodou.
+
 ## Diagnóstico
 
 Quando algo falha, o log fica em `%LOCALAPPDATA%\BlobTrap\logs`, um arquivo por dia e sete
 dias de retenção. Ele registra o ciclo de vida de cada download, a saída de erro do ffmpeg e
-do yt-dlp, e por que o resolvedor caiu para o fallback.
+do yt-dlp, por que o resolvedor caiu para o fallback e, quando um host recusa o cliente
+HTTP, a causa uma vez por host: os nomes dos headers enviados, se havia sessão (`com Cookie`
+/ `sem Cookie`) e se o navegador conseguiu.
 
 Tudo passa por redaction antes de tocar o disco: token assinado de CDN, cabeçalho `Cookie` e
 o nome de usuário no caminho saem redigidos. Host e caminho ficam, porque sem eles o log não
